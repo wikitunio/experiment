@@ -18,8 +18,8 @@ st.markdown("""
         background-image: linear-gradient(rgba(0, 0, 50, 0.6), rgba(0, 0, 50, 0.6)), url("app/static/IMG_9291.JPG");
         background-size: cover;
         background-position: center;
-        padding: 50px 20px;
-        border-radius: 15px;
+        padding: 20px 20px;
+        border-radius: 10px;
         color: white;
         text-align: center;
         margin-bottom: 30px;
