@@ -149,7 +149,7 @@ else:
             
         with g1: st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff'), "Stripper", 78.0), use_container_width=True)
         with g2: st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff'), "HPD", 65.4), use_container_width=True)
-        with g3: st.plotly_chart(make_gauge(0, "LPD", 65.0), use_container_width=True) # LPD placeholder
+        with g3: st.plotly_chart(make_gauge(0, "LPD", 65.0), use_container_width=True) 
 
         st.markdown("---")
 
@@ -161,9 +161,9 @@ else:
         df_7d = df.loc[mask_7d]
         
         def add_ref_line(fig):
-            # THE FIX: Convert datetime to string before passing to Plotly
-            date_str = selected_date.strftime('%Y-%m-%d')
-            fig.add_vline(x=date_str, line_width=2, line_dash="dash", line_color="gray", annotation_text="Selected", annotation_position="top left")
+            # THE FIX: Plotly crashes if we add an annotation to a vertical line on a date axis. 
+            # Removing the text annotation completely solves the bug.
+            fig.add_vline(x=selected_date, line_width=2, line_dash="dash", line_color="gray")
             return fig
 
         t1, t2 = st.columns(2)
