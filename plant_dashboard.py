@@ -92,7 +92,6 @@ else:
     # Sidebar
     st.sidebar.header("📅 Dashboard Controls")
     
-    # THE FIX: Always default to Today's actual date when opening the app
     today = datetime.date.today()
     selected_date = st.sidebar.date_input("Select Shift Date", today)
     selected_date = pd.to_datetime(selected_date)
@@ -136,7 +135,6 @@ else:
         st.markdown("<h3 class='section-header'>⚙️ Equipment Efficiencies</h3>", unsafe_allow_html=True)
         g1, g2, g3 = st.columns(3)
         
-        # THE FIX: Clean blue gauges, no weird colors, titles protected outside the chart!
         def make_gauge(val):
             if val > 0 and val <= 1.0: val *= 100
             fig = go.Figure(go.Indicator(
@@ -145,8 +143,8 @@ else:
                 number = {'suffix': "%", 'font': {'size': 26, 'color': '#1E3A8A'}},
                 gauge = {
                     'axis': {'range': [0, 100], 'visible': False},
-                    'bar': {'color': "#1E3A8A"}, # Clean Dark Blue
-                    'bgcolor': "#e0e0e0", # Light gray track
+                    'bar': {'color': "#1E3A8A"},
+                    'bgcolor': "#e0e0e0",
                     'borderwidth': 0,
                 }
             ))
@@ -155,13 +153,14 @@ else:
             
         with g1: 
             st.markdown("<div class='gauge-title'>Stripper</div><div class='gauge-sub'>Ref/Design: 78.0%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True)
+            # THE FIX: Added unique keys to all charts
+            st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True, key="stripper_gauge")
         with g2: 
             st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Ref/Design: 65.4%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True)
+            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True, key="hpd_gauge")
         with g3: 
             st.markdown("<div class='gauge-title'>LPD</div><div class='gauge-sub'>Ref/Design: 65.0%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(0), use_container_width=True) # LPD placeholder
+            st.plotly_chart(make_gauge(0), use_container_width=True, key="lpd_gauge") 
 
         st.markdown("---")
 
@@ -181,20 +180,20 @@ else:
         with t1:
             fig_moist = px.line(df_7d, x='Date', y='Moisture', markers=True, title='Average Moisture Trend', line_shape='spline')
             fig_moist.update_traces(line_color='#00b4d8', line_width=3, marker_size=8)
-            st.plotly_chart(add_ref_line(fig_moist), use_container_width=True)
+            st.plotly_chart(add_ref_line(fig_moist), use_container_width=True, key="moist_chart")
             
             fig_aps = px.line(df_7d, x='Date', y='APS', markers=True, title='Average APS Trend', line_shape='spline')
             fig_aps.update_traces(line_color='#ff9f1c', line_width=3, marker_size=8)
-            st.plotly_chart(add_ref_line(fig_aps), use_container_width=True)
+            st.plotly_chart(add_ref_line(fig_aps), use_container_width=True, key="aps_chart")
             
         with t2:
             fig_biuret = px.line(df_7d, x='Date', y='Biuret', markers=True, title='Average Biuret Trend', line_shape='spline')
             fig_biuret.update_traces(line_color='#e63946', line_width=3, marker_size=8)
-            st.plotly_chart(add_ref_line(fig_biuret), use_container_width=True)
+            st.plotly_chart(add_ref_line(fig_biuret), use_container_width=True, key="biuret_chart")
             
             fig_nc = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='Reactor N/C Ratio Trend', line_shape='spline')
             fig_nc.update_traces(line_color='#2a9d8f', line_width=3, marker_size=8)
-            st.plotly_chart(add_ref_line(fig_nc), use_container_width=True)
+            st.plotly_chart(add_ref_line(fig_nc), use_container_width=True, key="nc_chart")
 
     else:
         st.info("No data found for the selected date. Please pick another date from the sidebar.")
