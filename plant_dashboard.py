@@ -19,8 +19,7 @@ st.title("🏭 UREA Plant Daily Operations Dashboard")
 def load_data():
     file_name = "UREA Lab Analysis Dashboard.xlsx"
     
-    # 1. Load PQ Trends (Headers are on Row 2 -> skiprows=1)
-    # We explicitly select the columns by their position to avoid name confusion
+    # 1. Load PQ Trends
     try:
         df_pq_raw = pd.read_excel(file_name, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
@@ -35,8 +34,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Error loading PQ Trends: {e}"
 
-    # 2. Load Efficiencies (Headers are on Row 3 -> skiprows=2)
-    # This sheet contains Reactor, Stripper, HPD, HPA, and LPA all in one place!
+    # 2. Load Efficiencies
     try:
         df_eff_raw = pd.read_excel(file_name, sheet_name="Efficiencies", skiprows=2)
         df_eff = pd.DataFrame()
@@ -54,7 +52,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Error loading Efficiencies: {e}"
 
-    # 3. Merge cleanly (Left merge so we don't lose 2026 data)
+    # 3. Merge cleanly
     df_master = pd.merge(df_pq, df_eff, on='Date', how='left')
     
     # 4. Aggregate multiple shifts into daily averages
@@ -103,7 +101,7 @@ else:
         def get_delta(col): return get_val(daily_data, col) - get_val(yesterday_data, col)
 
         remarks = daily_data['Remarks'].values[0]
-        if str(remarks) != 'nan' and str(remarks).strip():
+        if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log/Remarks:** {remarks}")
 
         # --- SECTION 1: PRODUCTION & QUALITY ---
@@ -151,7 +149,7 @@ else:
             
         with g1: st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff'), "Stripper", 78.0), use_container_width=True)
         with g2: st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff'), "HPD", 65.4), use_container_width=True)
-        with g3: st.plotly_chart(make_gauge(0, "LPD", 65.0), use_container_width=True) # LPD placeholder until added to Excel
+        with g3: st.plotly_chart(make_gauge(0, "LPD", 65.0), use_container_width=True) # LPD placeholder
 
         st.markdown("---")
 
@@ -163,7 +161,9 @@ else:
         df_7d = df.loc[mask_7d]
         
         def add_ref_line(fig):
-            fig.add_vline(x=selected_date, line_width=2, line_dash="dash", line_color="gray", annotation_text="Selected", annotation_position="top left")
+            # THE FIX: Convert datetime to string before passing to Plotly
+            date_str = selected_date.strftime('%Y-%m-%d')
+            fig.add_vline(x=date_str, line_width=2, line_dash="dash", line_color="gray", annotation_text="Selected", annotation_position="top left")
             return fig
 
         t1, t2 = st.columns(2)
@@ -187,4 +187,4 @@ else:
             st.plotly_chart(add_ref_line(fig_nc), use_container_width=True)
 
     else:
-        st.warning("No data found for the selected date.")
+        st.warning("No data found for the selected date. Please pick another date from the sidebar.")
