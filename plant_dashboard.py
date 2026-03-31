@@ -50,7 +50,7 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=10)
 def load_data():
     # THE FIX FOR 503 ERROR: Use a "User-Agent" header to look like a real browser
     url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1"
