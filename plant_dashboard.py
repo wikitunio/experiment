@@ -7,18 +7,49 @@ import datetime
 import requests
 import io
 
+# -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
+# -- BEAUTIFUL CUSTOM CSS --
 st.markdown("""
     <style>
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    .section-header { color: #1E3A8A; margin-top: 30px; margin-bottom: 15px; font-weight: 600; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;}
-    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: 2px; padding-top: 10px; }
-    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 10px; }
+    /* Hero Header with Plant Image */
+    .hero-container {
+        background-image: linear-gradient(rgba(0, 0, 50, 0.6), rgba(0, 0, 50, 0.6)), url("app/static/IMG_9291.JPG");
+        background-size: cover;
+        background-position: center;
+        padding: 80px 20px;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
+    }
+    .hero-container h1 { font-size: 42px; margin-bottom: 10px; color: white !important; }
+    .hero-container p { font-size: 18px; opacity: 0.9; }
+    
+    /* Metric Cards Styling */
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
+    .section-header { color: #1E3A8A; margin-top: 35px; margin-bottom: 15px; font-weight: 700; border-bottom: 2px solid #1E3A8A; padding-bottom: 8px;}
+    
+    /* Gauge Titles */
+    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: 2px; padding-top: 15px; }
+    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 12px; }
+    
+    /* Footer Styling */
+    .footer { text-align: center; padding: 40px 0px; color: #666666; font-size: 14px; border-top: 1px solid #e0e0e0; margin-top: 50px; }
+    .footer a { color: #1E3A8A; text-decoration: none; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏭 UREA Plant Daily Operations Dashboard")
+# -- HERO HEADER SECTION --
+st.markdown("""
+    <div class="hero-container">
+        <h1>🏭 UREA Plant Daily Operations</h1>
+        <p>AgriTech Limited | Iskandarabad, Daudkhel</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 @st.cache_data(ttl=600)
 def load_data():
