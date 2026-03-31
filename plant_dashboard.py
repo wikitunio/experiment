@@ -119,15 +119,15 @@ else:
         r1, r2, r3 = st.columns(3)
         co2_conv = get_val(daily_data, 'CO2_Conv')
         if co2_conv > 0 and co2_conv <= 1.0: co2_conv *= 100 
-        r1.metric("CO2 Conversion (Ref: 58.0%)", f"{co2_conv:.1f} %")
-        r2.metric("Reactor N/C (Ref: 3.11)", f"{get_val(daily_data, 'Rx_NC'):.2f}")
-        r3.metric("HPA N/C (Ref: 2.38)", f"{get_val(daily_data, 'HPA_NC'):.2f}")
+        r1.metric("Reactor CO2 Conversion (Design: 58.0%)", f"{co2_conv:.1f} %")
+        r2.metric("Reactor N/C (Design: 3.11)", f"{get_val(daily_data, 'Rx_NC'):.2f}")
+        r3.metric("HPA N/C (Design: 2.38)", f"{get_val(daily_data, 'HPA_NC'):.2f}")
         
         st.markdown("<br>", unsafe_allow_html=True)
         r4, r5, r6 = st.columns(3)
-        r4.metric("HPA H/C (Ref: 1.289)", f"{get_val(daily_data, 'HPA_HC'):.2f}")
-        r5.metric("LPA N/C (Ref: 2.29)", f"{get_val(daily_data, 'LPA_NC'):.2f}")
-        r6.metric("LPA H/C (Ref: 2.28)", f"{get_val(daily_data, 'LPA_HC'):.2f}")
+        r4.metric("HPA H/C (Design: 1.289)", f"{get_val(daily_data, 'HPA_HC'):.2f}")
+        r5.metric("LPA N/C (Design: 2.29)", f"{get_val(daily_data, 'LPA_NC'):.2f}")
+        r6.metric("LPA H/C (Design: 2.28)", f"{get_val(daily_data, 'LPA_HC'):.2f}")
 
         # --- SECTION 3: EFFICIENCIES ---
         st.markdown("<h3 class='section-header'>⚙️ Equipment Efficiencies</h3>", unsafe_allow_html=True)
@@ -144,13 +144,13 @@ else:
             return fig
             
         with g1: 
-            st.markdown("<div class='gauge-title'>Stripper</div><div class='gauge-sub'>Ref/Design: 78.0%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='gauge-title'>Stripper</div><div class='gauge-sub'>Design: 78.0%</div>", unsafe_allow_html=True)
             st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True, key="stripper_gauge")
         with g2: 
-            st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Ref/Design: 65.4%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Design: 65.4%</div>", unsafe_allow_html=True)
             st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True, key="hpd_gauge")
         with g3: 
-            st.markdown("<div class='gauge-title'>LPD</div><div class='gauge-sub'>Ref/Design: 65.0%</div>", unsafe_allow_html=True)
+            st.markdown("<div class='gauge-title'>LPD</div><div class='gauge-sub'>Design: 65.0%</div>", unsafe_allow_html=True)
             st.plotly_chart(make_gauge(0), use_container_width=True, key="lpd_gauge") 
 
         st.markdown("---")
