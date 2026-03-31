@@ -23,7 +23,7 @@ st.markdown("""
         color: white;
         text-align: center;
         margin-bottom: 30px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
     }
     .hero-container h1 { font-size: 42px; margin-bottom: 10px; color: white !important; }
     .hero-container p { font-size: 18px; opacity: 0.9; }
