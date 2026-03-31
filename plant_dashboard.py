@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import timedelta
+import datetime
 
 st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
@@ -10,6 +11,8 @@ st.markdown("""
     <style>
     .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     .section-header { color: #1E3A8A; margin-top: 30px; margin-bottom: 10px; font-weight: 600; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;}
+    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: -15px; }
+    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -88,8 +91,10 @@ elif df.empty:
 else:
     # Sidebar
     st.sidebar.header("📅 Dashboard Controls")
-    latest_date = df['Date'].max()
-    selected_date = st.sidebar.date_input("Select Shift Date", latest_date)
+    
+    # THE FIX: Always default to Today's actual date when opening the app
+    today = datetime.date.today()
+    selected_date = st.sidebar.date_input("Select Shift Date", today)
     selected_date = pd.to_datetime(selected_date)
     
     daily_data = df[df['Date'] == selected_date]
@@ -131,25 +136,32 @@ else:
         st.markdown("<h3 class='section-header'>⚙️ Equipment Efficiencies</h3>", unsafe_allow_html=True)
         g1, g2, g3 = st.columns(3)
         
-        def make_gauge(val, title, ref_val):
+        # THE FIX: Clean blue gauges, no weird colors, titles protected outside the chart!
+        def make_gauge(val):
             if val > 0 and val <= 1.0: val *= 100
             fig = go.Figure(go.Indicator(
                 mode = "gauge+number",
                 value = val,
-                title = {'text': f"{title}<br><span style='font-size:14px;color:gray'>Ref/Design: {ref_val}%</span>", 'font': {'size': 18}},
-                number = {'suffix': "%", 'font': {'size': 24}},
+                number = {'suffix': "%", 'font': {'size': 26, 'color': '#1E3A8A'}},
                 gauge = {
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': "#2a9d8f"},
-                    'steps': [{'range': [0, 60], 'color': "#e63946"}, {'range': [60, 85], 'color': "#ffb703"}],
+                    'axis': {'range': [0, 100], 'visible': False},
+                    'bar': {'color': "#1E3A8A"}, # Clean Dark Blue
+                    'bgcolor': "#e0e0e0", # Light gray track
+                    'borderwidth': 0,
                 }
             ))
-            fig.update_layout(height=230, margin=dict(l=20, r=20, t=50, b=10))
+            fig.update_layout(height=160, margin=dict(l=10, r=10, t=10, b=10))
             return fig
             
-        with g1: st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff'), "Stripper", 78.0), use_container_width=True)
-        with g2: st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff'), "HPD", 65.4), use_container_width=True)
-        with g3: st.plotly_chart(make_gauge(0, "LPD", 65.0), use_container_width=True) 
+        with g1: 
+            st.markdown("<div class='gauge-title'>Stripper</div><div class='gauge-sub'>Ref/Design: 78.0%</div>", unsafe_allow_html=True)
+            st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True)
+        with g2: 
+            st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Ref/Design: 65.4%</div>", unsafe_allow_html=True)
+            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True)
+        with g3: 
+            st.markdown("<div class='gauge-title'>LPD</div><div class='gauge-sub'>Ref/Design: 65.0%</div>", unsafe_allow_html=True)
+            st.plotly_chart(make_gauge(0), use_container_width=True) # LPD placeholder
 
         st.markdown("---")
 
@@ -161,8 +173,6 @@ else:
         df_7d = df.loc[mask_7d]
         
         def add_ref_line(fig):
-            # THE FIX: Plotly crashes if we add an annotation to a vertical line on a date axis. 
-            # Removing the text annotation completely solves the bug.
             fig.add_vline(x=selected_date, line_width=2, line_dash="dash", line_color="gray")
             return fig
 
@@ -187,4 +197,4 @@ else:
             st.plotly_chart(add_ref_line(fig_nc), use_container_width=True)
 
     else:
-        st.warning("No data found for the selected date. Please pick another date from the sidebar.")
+        st.info("No data found for the selected date. Please pick another date from the sidebar.")
