@@ -7,7 +7,7 @@ import datetime
 import requests
 import io
 
-st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -18,7 +18,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏭 UREA Plant Daily Operations Dashboard")
+st.title("🏭 AGL UREA Plant Daily Operations Dashboard")
 
 @st.cache_data(ttl=600)
 def load_data():
@@ -181,3 +181,11 @@ else:
             st.plotly_chart(add_ref_line(f4), use_container_width=True, key="nc_chart")
     else:
         st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
+
+# -- FOOTER SECTION --
+st.markdown(f"""
+    <div class="footer">
+        Developed by <a href="https://www.linkedin.com/in/wikitunio" target="_blank">Waqar Ahmed Tunio</a> with Ai<br>
+        Email: <a href="mailto:ahmed.waqar@pafl.com.pk">ahmed.waqar@pafl.com.pk</a>
+    </div>
+    """, unsafe_allow_html=True)
