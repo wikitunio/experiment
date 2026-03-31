@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from datetime import timedelta
 
 # -- PAGE CONFIGURATION --
-st.set_page_config(page_title="AgriTech UREA Plant", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -16,73 +16,91 @@ st.markdown("""
 
 st.title("🏭 UREA Plant Daily Operations Dashboard")
 
-# -- SMART DATA EXTRACTOR --
-def read_sheet_robust(file_name, sheet_name):
-    """Scans an Excel sheet to automatically find where the actual data starts."""
-    try:
-        # Read without headers to find the 'Date' row
-        temp_df = pd.read_excel(file_name, sheet_name=sheet_name, header=None)
-        header_row_index = 0
-        
-        for i, row in temp_df.iterrows():
-            # Check if any cell in this row contains the word 'Date'
-            if any('date' == str(val).strip().lower() for val in row.values):
-                header_row_index = i
-                break
-                
-        # Now read the sheet properly using the found header row
-        df = pd.read_excel(file_name, sheet_name=sheet_name, skiprows=header_row_index)
-        df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
-        
-        # Convert Date column to actual datetime, ignoring errors
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-            df = df.dropna(subset=['Date']) # Drop rows without a valid date
-            
-        return df
-    except Exception as e:
-        return pd.DataFrame() # Return empty if sheet doesn't exist yet
-
+# -- OMNI-READER & DESIGN EXTRACTOR --
 @st.cache_data(ttl=600)
 def load_data():
     file_name = "UREA Lab Analysis Dashboard.xlsx"
+    try:
+        xl = pd.ExcelFile(file_name)
+    except Exception as e:
+        return pd.DataFrame(), {}
+
+    master_df = pd.DataFrame()
+    global_design = {}
+
+    # Read absolutely every sheet in the file
+    for sheet in xl.sheet_names:
+        try:
+            temp_df = pd.read_excel(file_name, sheet_name=sheet, header=None)
+            header_idx = -1
+            design_idx = -1
+
+            # Scan rows to find the Date header and the Design Values
+            for i, row in temp_df.iterrows():
+                row_strs = [str(val).strip().lower() for val in row.values]
+                if any('date' == r for r in row_strs) or any('date' in r for r in row_strs if len(r) < 6):
+                    header_idx = i
+                if any('design' in r for r in row_strs) or any('reference' in r for r in row_strs):
+                    design_idx = i
+
+            if header_idx != -1:
+                # Extract the column names
+                headers = [str(val).replace('\n', ' ').strip() for val in temp_df.iloc[header_idx].values]
+                
+                # Extract Design Values and match them to the columns
+                if design_idx != -1:
+                    for col_name, d_val in zip(headers, temp_df.iloc[design_idx].values):
+                        try:
+                            if pd.notna(d_val) and isinstance(d_val, (int, float)):
+                                global_design[col_name.lower()] = float(d_val)
+                        except:
+                            pass
+
+                # Read the actual data skipping the title rows
+                df = pd.read_excel(file_name, sheet_name=sheet, skiprows=header_idx)
+                df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
+
+                # Standardize Date column
+                date_col = next((c for c in df.columns if 'date' in c.lower()), None)
+                if date_col:
+                    df = df.rename(columns={date_col: 'Date'})
+                    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                    df = df.dropna(subset=['Date'])
+                    
+                    # Merge dynamically
+                    if master_df.empty:
+                        master_df = df
+                    else:
+                        cols_to_use = df.columns.difference(master_df.columns).tolist() + ['Date']
+                        master_df = pd.merge(master_df, df[cols_to_use], on='Date', how='outer')
+        except:
+            continue # If a sheet is totally blank, just skip it
+
+    if master_df.empty:
+        return master_df, {}
+
+    # Fill missing numbers with 0
+    numeric_cols = master_df.select_dtypes(include=['number']).columns
+    master_df[numeric_cols] = master_df[numeric_cols].fillna(0)
     
-    # 1. Read all sheets using the smart extractor
-    df_pq = read_sheet_robust(file_name, "PQ Trends")
-    df_rx = read_sheet_robust(file_name, "Reactor")
-    df_eff = read_sheet_robust(file_name, "Efficiencies")
-    
-    # 2. Merge them all together safely based on Date
-    df_master = df_pq
-    if not df_rx.empty:
-        df_master = pd.merge(df_master, df_rx, on='Date', how='outer')
-    if not df_eff.empty:
-        df_master = pd.merge(df_master, df_eff, on='Date', how='outer')
-        
-    # Drop rows where there is no Date
-    df_master = df_master.dropna(subset=['Date'])
-    
-    # Fill missing numeric values with 0 to prevent math errors
-    numeric_cols = df_master.select_dtypes(include=['number']).columns
-    df_master[numeric_cols] = df_master[numeric_cols].fillna(0)
-            
-    # Aggregation Logic: Sum Production, Average everything else
+    # Aggregate multiple shifts into 1 day
     agg_funcs = {}
-    for col in df_master.columns:
+    for col in master_df.columns:
         if col == 'Date': continue
         elif 'prod' in col.lower(): agg_funcs[col] = 'sum'
         elif col in numeric_cols: agg_funcs[col] = 'mean'
-        else: agg_funcs[col] = 'first' # Keep remarks text
-            
-    df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
+        else: agg_funcs[col] = 'first'
+
+    df_daily = master_df.groupby('Date').agg(agg_funcs).reset_index()
     df_daily = df_daily.sort_values('Date')
-    return df_daily
+    
+    return df_daily, global_design
 
 try:
-    df = load_data()
+    df, design_dict = load_data()
     
     if df.empty:
-        st.error("No valid data found. Please ensure your Excel file has a 'Date' column in the sheets.")
+        st.error("No valid data found. Ensure your Excel file has 'Date' columns.")
     else:
         # -- SIDEBAR --
         st.sidebar.header("📅 Dashboard Controls")
@@ -95,8 +113,7 @@ try:
         
         if not daily_data.empty:
             
-            # --- SMART COLUMN FINDER ---
-            # This looks for keywords in your columns so you don't have to rename your Excel headers!
+            # Helper to find values regardless of exact column spelling
             def find_val(data_row, keywords):
                 if data_row.empty: return 0.0
                 for col in data_row.columns:
@@ -107,7 +124,22 @@ try:
             def get_delta(keywords):
                 return find_val(daily_data, keywords) - find_val(yesterday_data, keywords)
 
-            # Check for Remarks
+            # Helper to find Design Values
+            def get_design(keywords):
+                for k, v in design_dict.items():
+                    if all(key.lower() in k.lower() for key in keywords):
+                        return v
+                return None
+                
+            # Helper to format Metric Titles with Design Values
+            def format_title(base_title, keywords, is_percent=False):
+                d_val = get_design(keywords)
+                if d_val is not None:
+                    if is_percent and d_val <= 1.0: d_val *= 100
+                    suffix = f"{d_val:.1f}%" if is_percent else f"{d_val:.2f}"
+                    return f"{base_title} (Ref: {suffix})"
+                return base_title
+
             remarks_col = next((c for c in daily_data.columns if 'remark' in c.lower()), None)
             if remarks_col and pd.notna(daily_data[remarks_col].values[0]) and str(daily_data[remarks_col].values[0]).strip() not in ["0", "0.0", ""]:
                 st.info(f"📝 **Shift Log/Remarks:** {daily_data[remarks_col].values[0]}")
@@ -119,8 +151,8 @@ try:
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Total Production", f"{find_val(daily_data, ['prod']):,.0f} MT", f"{get_delta(['prod']):.0f} MT")
             c2.metric("Avg Plant Load", f"{find_val(daily_data, ['load']):.1f} %", f"{get_delta(['load']):.1f} %")
-            c3.metric("Avg Moisture", f"{find_val(daily_data, ['moist']):.3f} %", f"{get_delta(['moist']):.3f} %", delta_color="inverse")
-            c4.metric("Avg Biuret", f"{find_val(daily_data, ['biuret']):.2f} %", f"{get_delta(['biuret']):.2f} %", delta_color="inverse")
+            c3.metric(format_title("Avg Moisture", ['moist']), f"{find_val(daily_data, ['moist']):.3f} %", f"{get_delta(['moist']):.3f} %", delta_color="inverse")
+            c4.metric(format_title("Avg Biuret", ['biuret']), f"{find_val(daily_data, ['biuret']):.2f} %", f"{get_delta(['biuret']):.2f} %", delta_color="inverse")
             c5.metric("Avg APS", f"{find_val(daily_data, ['aps']):.2f} mm", f"{get_delta(['aps']):.2f} mm")
 
             # ==========================================
@@ -129,19 +161,17 @@ try:
             st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Absorbers</h3>", unsafe_allow_html=True)
             r1, r2, r3, r4, r5, r6 = st.columns(6)
             
-            # Auto-format CO2 conversion
             co2_conv = find_val(daily_data, ['co2', 'conv'])
-            if co2_conv > 0 and co2_conv < 2.0: co2_conv *= 100 
+            if co2_conv > 0 and co2_conv <= 1.0: co2_conv *= 100 
             
-            # Look specifically for HPA/LPA vs standard Reactor N/C
             rx_nc = next((float(daily_data[c].values[0]) for c in daily_data.columns if 'n/c' in c.lower() and 'hpa' not in c.lower() and 'lpa' not in c.lower()), 0.0)
             
-            r1.metric("CO2 Conversion", f"{co2_conv:.1f} %")
-            r2.metric("Reactor N/C", f"{rx_nc:.2f}")
-            r3.metric("HPA N/C", f"{find_val(daily_data, ['hpa', 'n/c']):.2f}")
-            r4.metric("HPA H/C", f"{find_val(daily_data, ['hpa', 'h/c']):.2f}")
-            r5.metric("LPA N/C", f"{find_val(daily_data, ['lpa', 'n/c']):.2f}")
-            r6.metric("LPA H/C", f"{find_val(daily_data, ['lpa', 'h/c']):.2f}")
+            r1.metric(format_title("CO2 Conversion", ['co2', 'conv'], True), f"{co2_conv:.1f} %")
+            r2.metric(format_title("Reactor N/C", ['n/c']), f"{rx_nc:.2f}")
+            r3.metric(format_title("HPA N/C", ['hpa', 'n/c']), f"{find_val(daily_data, ['hpa', 'n/c']):.2f}")
+            r4.metric(format_title("HPA H/C", ['hpa', 'h/c']), f"{find_val(daily_data, ['hpa', 'h/c']):.2f}")
+            r5.metric(format_title("LPA N/C", ['lpa', 'n/c']), f"{find_val(daily_data, ['lpa', 'n/c']):.2f}")
+            r6.metric(format_title("LPA H/C", ['lpa', 'h/c']), f"{find_val(daily_data, ['lpa', 'h/c']):.2f}")
 
             # ==========================================
             # SECTION 3: EQUIPMENT EFFICIENCIES (GAUGES)
@@ -149,11 +179,17 @@ try:
             st.markdown("<h3 class='section-header'>⚙️ Equipment Efficiencies</h3>", unsafe_allow_html=True)
             g1, g2, g3 = st.columns(3)
             
-            def make_gauge(val, title):
+            def make_gauge(val, title_base, keywords):
+                d_val = get_design(keywords)
+                title_text = f"{title_base}"
+                if d_val is not None:
+                    if d_val <= 1.0: d_val *= 100
+                    title_text += f"<br><span style='font-size:14px;color:gray'>Ref/Design: {d_val:.1f}%</span>"
+                    
                 fig = go.Figure(go.Indicator(
                     mode = "gauge+number",
                     value = val,
-                    title = {'text': title, 'font': {'size': 18}},
+                    title = {'text': title_text, 'font': {'size': 18}},
                     number = {'suffix': "%", 'font': {'size': 24}},
                     gauge = {
                         'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
@@ -164,12 +200,12 @@ try:
                         'steps': [{'range': [0, 60], 'color': "#e63946"}, {'range': [60, 85], 'color': "#ffb703"}],
                     }
                 ))
-                fig.update_layout(height=220, margin=dict(l=20, r=20, t=40, b=10))
+                fig.update_layout(height=230, margin=dict(l=20, r=20, t=50, b=10))
                 return fig
                 
-            with g1: st.plotly_chart(make_gauge(find_val(daily_data, ['stripper']), "Stripper Efficiency"), use_container_width=True)
-            with g2: st.plotly_chart(make_gauge(find_val(daily_data, ['hpd']), "HPD Efficiency"), use_container_width=True)
-            with g3: st.plotly_chart(make_gauge(find_val(daily_data, ['lpd']), "LPD Efficiency"), use_container_width=True)
+            with g1: st.plotly_chart(make_gauge(find_val(daily_data, ['stripper']), "Stripper", ['stripper']), use_container_width=True)
+            with g2: st.plotly_chart(make_gauge(find_val(daily_data, ['hpd']), "HPD", ['hpd']), use_container_width=True)
+            with g3: st.plotly_chart(make_gauge(find_val(daily_data, ['lpd']), "LPD", ['lpd']), use_container_width=True)
 
             st.markdown("---")
 
@@ -181,7 +217,6 @@ try:
             mask_7d = (df['Date'] <= selected_date) & (df['Date'] > selected_date - timedelta(days=7))
             df_7d = df.loc[mask_7d]
             
-            # Find exact column names for graphing
             col_moist = next((c for c in df.columns if 'moist' in c.lower()), None)
             col_aps = next((c for c in df.columns if 'aps' in c.lower()), None)
             col_biuret = next((c for c in df.columns if 'biuret' in c.lower()), None)
