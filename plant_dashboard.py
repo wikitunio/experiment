@@ -46,7 +46,7 @@ st.markdown("""
 st.markdown("""
     <div class="hero-container">
         <h1>🏭 UREA Plant Daily Operations</h1>
-        <p>AgriTech Limited | Iskandarabad, Daudkhel</p>
+        <p>AgriTech Limited | Daudkhel</p>
     </div>
     """, unsafe_allow_html=True)
 
