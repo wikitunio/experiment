@@ -10,9 +10,9 @@ st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_
 st.markdown("""
     <style>
     .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    .section-header { color: #1E3A8A; margin-top: 30px; margin-bottom: 10px; font-weight: 600; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;}
-    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: -15px; }
-    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 5px; }
+    .section-header { color: #1E3A8A; margin-top: 30px; margin-bottom: 15px; font-weight: 600; border-bottom: 2px solid #e0e0e0; padding-bottom: 5px;}
+    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: 2px; padding-top: 10px; }
+    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -119,14 +119,19 @@ else:
 
         # --- SECTION 2: SYNTHESIS LOOP ---
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Absorbers</h3>", unsafe_allow_html=True)
-        r1, r2, r3, r4, r5, r6 = st.columns(6)
         
+        # FIX 1: Arranged in 2 rows of 3 columns so reference texts never hide
+        r1, r2, r3 = st.columns(3)
         co2_conv = get_val(daily_data, 'CO2_Conv')
         if co2_conv > 0 and co2_conv <= 1.0: co2_conv *= 100 
         
         r1.metric("CO2 Conversion (Ref: 58.0%)", f"{co2_conv:.1f} %")
         r2.metric("Reactor N/C (Ref: 3.11)", f"{get_val(daily_data, 'Rx_NC'):.2f}")
         r3.metric("HPA N/C (Ref: 2.38)", f"{get_val(daily_data, 'HPA_NC'):.2f}")
+        
+        st.markdown("<br>", unsafe_allow_html=True) # Small visual break
+        
+        r4, r5, r6 = st.columns(3)
         r4.metric("HPA H/C (Ref: 1.289)", f"{get_val(daily_data, 'HPA_HC'):.2f}")
         r5.metric("LPA N/C (Ref: 2.29)", f"{get_val(daily_data, 'LPA_NC'):.2f}")
         r6.metric("LPA H/C (Ref: 2.28)", f"{get_val(daily_data, 'LPA_HC'):.2f}")
@@ -151,9 +156,9 @@ else:
             fig.update_layout(height=160, margin=dict(l=10, r=10, t=10, b=10))
             return fig
             
+        # FIX 2: Spacing automatically handled by the updated CSS classes at the top
         with g1: 
             st.markdown("<div class='gauge-title'>Stripper</div><div class='gauge-sub'>Ref/Design: 78.0%</div>", unsafe_allow_html=True)
-            # THE FIX: Added unique keys to all charts
             st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True, key="stripper_gauge")
         with g2: 
             st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Ref/Design: 65.4%</div>", unsafe_allow_html=True)
@@ -177,9 +182,11 @@ else:
 
         t1, t2 = st.columns(2)
         
+        # FIX 3: Added horizontal Design lines to the charts
         with t1:
             fig_moist = px.line(df_7d, x='Date', y='Moisture', markers=True, title='Average Moisture Trend', line_shape='spline')
             fig_moist.update_traces(line_color='#00b4d8', line_width=3, marker_size=8)
+            fig_moist.add_hline(y=0.3, line_dash="dot", line_color="red", annotation_text="Design (0.3%)", annotation_position="top right")
             st.plotly_chart(add_ref_line(fig_moist), use_container_width=True, key="moist_chart")
             
             fig_aps = px.line(df_7d, x='Date', y='APS', markers=True, title='Average APS Trend', line_shape='spline')
@@ -189,10 +196,12 @@ else:
         with t2:
             fig_biuret = px.line(df_7d, x='Date', y='Biuret', markers=True, title='Average Biuret Trend', line_shape='spline')
             fig_biuret.update_traces(line_color='#e63946', line_width=3, marker_size=8)
+            fig_biuret.add_hline(y=0.9, line_dash="dot", line_color="red", annotation_text="Design (0.9%)", annotation_position="top right")
             st.plotly_chart(add_ref_line(fig_biuret), use_container_width=True, key="biuret_chart")
             
             fig_nc = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='Reactor N/C Ratio Trend', line_shape='spline')
             fig_nc.update_traces(line_color='#2a9d8f', line_width=3, marker_size=8)
+            fig_nc.add_hline(y=3.11, line_dash="dot", line_color="red", annotation_text="Design (3.11)", annotation_position="top right")
             st.plotly_chart(add_ref_line(fig_nc), use_container_width=True, key="nc_chart")
 
     else:
