@@ -23,7 +23,7 @@ st.title("🏭 UREA Plant Daily Operations Dashboard")
 @st.cache_data(ttl=600)
 def load_data():
     # THE FIX FOR 503 ERROR: Use a "User-Agent" header to look like a real browser
-    url = "https://docs.google.com/spreadsheets/d/1rau4W_Ipah6fgtZmZW8k_Q_IHKRU1lWE/edit?usp=sharing&ouid=110103981098432575870&rtpof=true&sd=true?download=1?download=1"
+    url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     
     try:
