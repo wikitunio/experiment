@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import timedelta
+import traceback
 
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
@@ -16,14 +17,14 @@ st.markdown("""
 
 st.title("🏭 UREA Plant Daily Operations Dashboard")
 
-# -- OMNI-READER & DESIGN EXTRACTOR --
+# -- BULLETPROOF DATA EXTRACTOR --
 @st.cache_data(ttl=600)
 def load_data():
     file_name = "UREA Lab Analysis Dashboard.xlsx"
     try:
         xl = pd.ExcelFile(file_name)
     except Exception as e:
-        return pd.DataFrame(), {}
+        return pd.DataFrame(), {}, f"Failed to open Excel file. Is it named correctly? Error: {e}"
 
     master_df = pd.DataFrame()
     global_design = {}
@@ -34,6 +35,7 @@ def load_data():
             header_idx = -1
             design_idx = -1
 
+            # Find where the data and design values actually start
             for i, row in temp_df.iterrows():
                 row_strs = [str(val).strip().lower() for val in row.values]
                 if any('date' == r for r in row_strs) or any('date' in r for r in row_strs if len(r) < 6):
@@ -44,16 +46,20 @@ def load_data():
             if header_idx != -1:
                 headers = [str(val).replace('\n', ' ').strip() for val in temp_df.iloc[header_idx].values]
                 
+                # Grab design values safely
                 if design_idx != -1:
                     for col_name, d_val in zip(headers, temp_df.iloc[design_idx].values):
                         try:
-                            if pd.notna(d_val) and isinstance(d_val, (int, float)):
+                            if pd.notna(d_val) and str(d_val).strip() != "":
                                 global_design[col_name.lower()] = float(d_val)
                         except:
                             pass
 
                 df = pd.read_excel(file_name, sheet_name=sheet, skiprows=header_idx)
                 df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
+                
+                # Remove unnamed ghost columns from Excel
+                df = df.loc[:, ~df.columns.str.contains('^unnamed', case=False)]
 
                 date_col = next((c for c in df.columns if 'date' in c.lower()), None)
                 if date_col:
@@ -64,36 +70,46 @@ def load_data():
                     if master_df.empty:
                         master_df = df
                     else:
-                        cols_to_use = df.columns.difference(master_df.columns).tolist() + ['Date']
+                        cols_to_use = list(set(df.columns.tolist()) - set(master_df.columns.tolist()))
+                        cols_to_use.append('Date')
                         master_df = pd.merge(master_df, df[cols_to_use], on='Date', how='outer')
         except:
             continue 
 
     if master_df.empty:
-        return master_df, {}
+        return master_df, {}, "No valid data could be extracted. Please check the Excel sheet formats."
 
-    numeric_cols = master_df.select_dtypes(include=['number']).columns
-    master_df[numeric_cols] = master_df[numeric_cols].fillna(0)
-    
+    # -- THE FIX: Aggressively force numbers --
+    for col in master_df.columns:
+        if col == 'Date': continue
+        # Keep remarks as text
+        if 'remark' in col.lower() or 'log' in col.lower() or 'note' in col.lower():
+            master_df[col] = master_df[col].astype(str)
+        else:
+            # Force everything else to numbers. Text becomes NaN, then 0.0.
+            master_df[col] = pd.to_numeric(master_df[col], errors='coerce').fillna(0.0)
+
+    # Aggregate by Day
     agg_funcs = {}
     for col in master_df.columns:
         if col == 'Date': continue
         elif 'prod' in col.lower(): agg_funcs[col] = 'sum'
-        elif col in numeric_cols: agg_funcs[col] = 'mean'
-        else: agg_funcs[col] = 'first'
+        elif 'remark' in col.lower(): agg_funcs[col] = 'first'
+        else: agg_funcs[col] = 'mean'
 
     df_daily = master_df.groupby('Date').agg(agg_funcs).reset_index()
     df_daily = df_daily.sort_values('Date')
     
-    return df_daily, global_design
+    return df_daily, global_design, ""
 
 try:
-    df, design_dict = load_data()
+    df, design_dict, err_msg = load_data()
     
-    if df.empty:
-        st.error("No valid data found. Ensure your Excel file has 'Date' columns.")
+    if err_msg:
+        st.error(err_msg)
+    elif df.empty:
+        st.warning("Data loaded, but it appears empty.")
     else:
-        # -- SIDEBAR --
         st.sidebar.header("📅 Dashboard Controls")
         latest_date = df['Date'].max()
         selected_date = st.sidebar.date_input("Select Shift Date", latest_date)
@@ -104,11 +120,13 @@ try:
         
         if not daily_data.empty:
             
+            # Ultra-safe value finder
             def find_val(data_row, keywords):
                 if data_row.empty: return 0.0
                 for col in data_row.columns:
                     if all(k.lower() in col.lower() for k in keywords):
-                        return float(data_row[col].values[0])
+                        try: return float(data_row[col].values[0])
+                        except: return 0.0
                 return 0.0
                 
             def get_delta(keywords):
@@ -128,8 +146,9 @@ try:
                     return f"{base_title} (Ref: {suffix})"
                 return base_title
 
+            # Remarks Display
             remarks_col = next((c for c in daily_data.columns if 'remark' in c.lower()), None)
-            if remarks_col and pd.notna(daily_data[remarks_col].values[0]) and str(daily_data[remarks_col].values[0]).strip() not in ["0", "0.0", ""]:
+            if remarks_col and pd.notna(daily_data[remarks_col].values[0]) and str(daily_data[remarks_col].values[0]).strip() not in ["0", "0.0", "", "nan", "None"]:
                 st.info(f"📝 **Shift Log/Remarks:** {daily_data[remarks_col].values[0]}")
 
             # ==========================================
@@ -200,7 +219,6 @@ try:
             # ==========================================
             # SECTION 4: 1-WEEK TRENDS
             # ==========================================
-            # Calculate exactly 1 week (Selected date minus 6 days = 7 days inclusive)
             week_start = selected_date - timedelta(days=6)
             st.markdown(f"<h3 class='section-header'>📈 One Week Trend ({week_start.strftime('%d %b')} to {selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
             
@@ -212,7 +230,6 @@ try:
             col_biuret = next((c for c in df.columns if 'biuret' in c.lower()), None)
             col_nc = next((c for c in df.columns if 'n/c' in c.lower() and 'hpa' not in c.lower() and 'lpa' not in c.lower()), None)
             
-            # Helper function to add vertical reference line
             def add_ref_line(fig):
                 fig.add_vline(x=selected_date, line_width=2, line_dash="dash", line_color="gray", annotation_text="Selected Date", annotation_position="top left")
                 return fig
@@ -245,4 +262,5 @@ try:
             st.warning("No data found for the selected date. Please pick another date from the sidebar.")
 
 except Exception as e:
-    st.error(f"Error processing the dashboard. Details: {e}")
+    st.error("🚨 System Crash Detailed Report:")
+    st.code(traceback.format_exc())
