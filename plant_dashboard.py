@@ -28,14 +28,12 @@ def load_data():
     master_df = pd.DataFrame()
     global_design = {}
 
-    # Read absolutely every sheet in the file
     for sheet in xl.sheet_names:
         try:
             temp_df = pd.read_excel(file_name, sheet_name=sheet, header=None)
             header_idx = -1
             design_idx = -1
 
-            # Scan rows to find the Date header and the Design Values
             for i, row in temp_df.iterrows():
                 row_strs = [str(val).strip().lower() for val in row.values]
                 if any('date' == r for r in row_strs) or any('date' in r for r in row_strs if len(r) < 6):
@@ -44,10 +42,8 @@ def load_data():
                     design_idx = i
 
             if header_idx != -1:
-                # Extract the column names
                 headers = [str(val).replace('\n', ' ').strip() for val in temp_df.iloc[header_idx].values]
                 
-                # Extract Design Values and match them to the columns
                 if design_idx != -1:
                     for col_name, d_val in zip(headers, temp_df.iloc[design_idx].values):
                         try:
@@ -56,34 +52,29 @@ def load_data():
                         except:
                             pass
 
-                # Read the actual data skipping the title rows
                 df = pd.read_excel(file_name, sheet_name=sheet, skiprows=header_idx)
                 df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
 
-                # Standardize Date column
                 date_col = next((c for c in df.columns if 'date' in c.lower()), None)
                 if date_col:
                     df = df.rename(columns={date_col: 'Date'})
                     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
                     df = df.dropna(subset=['Date'])
                     
-                    # Merge dynamically
                     if master_df.empty:
                         master_df = df
                     else:
                         cols_to_use = df.columns.difference(master_df.columns).tolist() + ['Date']
                         master_df = pd.merge(master_df, df[cols_to_use], on='Date', how='outer')
         except:
-            continue # If a sheet is totally blank, just skip it
+            continue 
 
     if master_df.empty:
         return master_df, {}
 
-    # Fill missing numbers with 0
     numeric_cols = master_df.select_dtypes(include=['number']).columns
     master_df[numeric_cols] = master_df[numeric_cols].fillna(0)
     
-    # Aggregate multiple shifts into 1 day
     agg_funcs = {}
     for col in master_df.columns:
         if col == 'Date': continue
@@ -113,7 +104,6 @@ try:
         
         if not daily_data.empty:
             
-            # Helper to find values regardless of exact column spelling
             def find_val(data_row, keywords):
                 if data_row.empty: return 0.0
                 for col in data_row.columns:
@@ -124,14 +114,12 @@ try:
             def get_delta(keywords):
                 return find_val(daily_data, keywords) - find_val(yesterday_data, keywords)
 
-            # Helper to find Design Values
             def get_design(keywords):
                 for k, v in design_dict.items():
                     if all(key.lower() in k.lower() for key in keywords):
                         return v
                 return None
                 
-            # Helper to format Metric Titles with Design Values
             def format_title(base_title, keywords, is_percent=False):
                 d_val = get_design(keywords)
                 if d_val is not None:
@@ -210,11 +198,13 @@ try:
             st.markdown("---")
 
             # ==========================================
-            # SECTION 4: 7-DAY TRENDS
+            # SECTION 4: 1-WEEK TRENDS
             # ==========================================
-            st.markdown("<h3 class='section-header'>📈 Last 7 Days Operational Trends</h3>", unsafe_allow_html=True)
+            # Calculate exactly 1 week (Selected date minus 6 days = 7 days inclusive)
+            week_start = selected_date - timedelta(days=6)
+            st.markdown(f"<h3 class='section-header'>📈 One Week Trend ({week_start.strftime('%d %b')} to {selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
             
-            mask_7d = (df['Date'] <= selected_date) & (df['Date'] > selected_date - timedelta(days=7))
+            mask_7d = (df['Date'] <= selected_date) & (df['Date'] >= week_start)
             df_7d = df.loc[mask_7d]
             
             col_moist = next((c for c in df.columns if 'moist' in c.lower()), None)
@@ -222,29 +212,34 @@ try:
             col_biuret = next((c for c in df.columns if 'biuret' in c.lower()), None)
             col_nc = next((c for c in df.columns if 'n/c' in c.lower() and 'hpa' not in c.lower() and 'lpa' not in c.lower()), None)
             
+            # Helper function to add vertical reference line
+            def add_ref_line(fig):
+                fig.add_vline(x=selected_date, line_width=2, line_dash="dash", line_color="gray", annotation_text="Selected Date", annotation_position="top left")
+                return fig
+
             t1, t2 = st.columns(2)
             
             with t1:
                 if col_moist:
                     fig_moist = px.line(df_7d, x='Date', y=col_moist, markers=True, title='Average Moisture Trend', line_shape='spline')
                     fig_moist.update_traces(line_color='#00b4d8', line_width=3, marker_size=8)
-                    st.plotly_chart(fig_moist, use_container_width=True)
+                    st.plotly_chart(add_ref_line(fig_moist), use_container_width=True)
                 
                 if col_aps:
                     fig_aps = px.line(df_7d, x='Date', y=col_aps, markers=True, title='Average APS Trend', line_shape='spline')
                     fig_aps.update_traces(line_color='#ff9f1c', line_width=3, marker_size=8)
-                    st.plotly_chart(fig_aps, use_container_width=True)
+                    st.plotly_chart(add_ref_line(fig_aps), use_container_width=True)
                 
             with t2:
                 if col_biuret:
                     fig_biuret = px.line(df_7d, x='Date', y=col_biuret, markers=True, title='Average Biuret Trend', line_shape='spline')
                     fig_biuret.update_traces(line_color='#e63946', line_width=3, marker_size=8)
-                    st.plotly_chart(fig_biuret, use_container_width=True)
+                    st.plotly_chart(add_ref_line(fig_biuret), use_container_width=True)
                 
                 if col_nc:
                     fig_nc = px.line(df_7d, x='Date', y=col_nc, markers=True, title='Reactor N/C Ratio Trend', line_shape='spline')
                     fig_nc.update_traces(line_color='#2a9d8f', line_width=3, marker_size=8)
-                    st.plotly_chart(fig_nc, use_container_width=True)
+                    st.plotly_chart(add_ref_line(fig_nc), use_container_width=True)
 
         else:
             st.warning("No data found for the selected date. Please pick another date from the sidebar.")
