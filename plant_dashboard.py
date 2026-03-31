@@ -20,7 +20,7 @@ st.title("🏭 UREA Plant Daily Operations Dashboard")
 
 @st.cache_data(ttl=600)
 def load_data():
-    file_name = "UREA Lab Analysis Dashboard.xlsx"
+    file_name = "file_name = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1""
     
     # 1. Load PQ Trends
     try:
