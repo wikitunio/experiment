@@ -28,8 +28,6 @@ st.markdown("""
     .hero-container p { font-size: 18px; opacity: 0.9; }
     .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
     .section-header { color: #1E3A8A; margin-top: 35px; margin-bottom: 15px; font-weight: 700; border-bottom: 2px solid #1E3A8A; padding-bottom: 8px;}
-    .gauge-title { text-align: center; font-size: 18px; font-weight: bold; color: #333333; margin-bottom: 2px; padding-top: 10px; }
-    .gauge-sub { text-align: center; font-size: 13px; color: #888888; margin-bottom: 8px; }
     .footer { text-align: center; padding: 40px 0px; color: #666666; font-size: 14px; border-top: 1px solid #e0e0e0; margin-top: 50px; }
     .footer a { color: #1E3A8A; text-decoration: none; font-weight: bold; }
     
@@ -60,6 +58,7 @@ st.markdown("""
     .vessel-header-hpd { background: #059669; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
     .vessel-header-hpa { background: #0284c7; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
     .vessel-header-lpa { background: #0d9488; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
+    .gauge-combo-title { text-align: center; font-size: 16px; font-weight: bold; color: #1E3A8A; margin-bottom: 0px; padding-top: 5px; }
     
     .vessel-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #b0b0b0; padding: 6px 0; font-size: 15px; }
     .vessel-row:last-child { border-bottom: none; }
@@ -125,7 +124,7 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # --- THE FIX: Convert Decimal Efficiencies to True Percentages ---
+    # Convert Decimals to Percentages
     for col in ['CO2_Conv', 'Stripper_Eff', 'HPD_Eff']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
@@ -200,7 +199,7 @@ elif not df.empty:
             
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Row 2: HPA and LPA
+        # Row 2: HPA, LPA, and the New Combo Gauge!
         v4, v5, v6 = st.columns([1, 1, 1])
         with v4:
             st.markdown(f"""
@@ -218,30 +217,31 @@ elif not df.empty:
                 <div class="vessel-row"><span>LPA H/C (Design: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
-        
-        # We leave v6 completely empty so the HPA and LPA take up exactly 1/3 of the screen each, aligning perfectly with the top row.
-
-        # --- SECTION 3: EFFICIENCIES GAUGES ---
-        st.markdown("<h3 class='section-header'>⚙️ Supporting Equipment</h3>", unsafe_allow_html=True)
-        g1, g2, g3 = st.columns(3) # Keeping 3 columns but only using 2, to keep sizes consistent
-        def make_gauge(val):
-            fig = go.Figure(go.Indicator(
-                mode = "gauge+number", value = val,
-                number = {'suffix': "%", 'font': {'size': 26, 'color': '#1E3A8A'}},
-                gauge = {'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#1E3A8A"}, 'bgcolor': "#e0e0e0", 'borderwidth': 0}
-            ))
-            fig.update_layout(height=140, margin=dict(l=10, r=10, t=10, b=10))
-            return fig
             
-        with g1: 
-            st.markdown("<div class='gauge-title'>Stripper Overview</div><div class='gauge-sub'>Design: 78.0%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True, key="strip_gauge")
-        with g2: 
-            st.markdown("<div class='gauge-title'>HPD Overview</div><div class='gauge-sub'>Design: 65.4%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True, key="hpd_gauge")
-        # g3 is empty because LPD was deleted.
+        with v6:
+            # THE FIX: Dual Gauge inside the synthesis loop section!
+            st.markdown("<div class='gauge-combo-title'>Equipment Efficiencies</div>", unsafe_allow_html=True)
+            fig_combo = go.Figure()
+            # Stripper (Left side)
+            fig_combo.add_trace(go.Indicator(
+                mode="gauge+number", value=get_val(daily_data, 'Stripper_Eff'),
+                title={'text': "Stripper", 'font': {'size': 14, 'color': '#666'}},
+                number={'suffix': "%", 'font': {'size': 20, 'color': '#1E3A8A'}},
+                domain={'x': [0, 0.45], 'y': [0, 1]},
+                gauge={'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#d97706"}, 'bgcolor': "#e0e0e0", 'borderwidth': 0}
+            ))
+            # HPD (Right side)
+            fig_combo.add_trace(go.Indicator(
+                mode="gauge+number", value=get_val(daily_data, 'HPD_Eff'),
+                title={'text': "HPD", 'font': {'size': 14, 'color': '#666'}},
+                number={'suffix': "%", 'font': {'size': 20, 'color': '#1E3A8A'}},
+                domain={'x': [0.55, 1], 'y': [0, 1]},
+                gauge={'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#059669"}, 'bgcolor': "#e0e0e0", 'borderwidth': 0}
+            ))
+            fig_combo.update_layout(height=180, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_combo, use_container_width=True, key="combo_gauge")
 
-        # --- SECTION 4: TRENDS ---
+        # --- SECTION 3: TRENDS ---
         week_start = selected_date_dt - timedelta(days=6)
         st.markdown(f"<h3 class='section-header'>📈 One Week Trends ({week_start.strftime('%d %b')} to {selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
         df_7d = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= week_start)]
@@ -252,37 +252,43 @@ elif not df.empty:
             if val: fig.add_hline(y=val, line_dash="dot", line_color="red")
             return fig
 
-        # ROW 1: Quality Trends
+        # THE FIX: Complete graph reordering to match your exact request
         t1, t2 = st.columns(2)
+        
+        # Row 1 of Graphs
         with t1:
-            f1 = px.line(df_7d, x='Date', y='Moisture', markers=True, title='Avg Moisture (Design: 0.3%)', line_shape='spline')
-            st.plotly_chart(add_ref(f1, 0.3), use_container_width=True, key="t1")
-            f2 = px.line(df_7d, x='Date', y='APS', markers=True, title='Avg APS Trend', line_shape='spline')
-            st.plotly_chart(add_ref(f2), use_container_width=True, key="t2")
+            f1 = px.line(df_7d, x='Date', y='Production', markers=True, title='1. Daily Production Trend (MT)', line_shape='spline')
+            f1.update_traces(line_color='#2ca02c') 
+            st.plotly_chart(add_ref(f1), use_container_width=True, key="t1")
         with t2:
-            f3 = px.line(df_7d, x='Date', y='Biuret', markers=True, title='Avg Biuret (Design: 0.9%)', line_shape='spline')
-            st.plotly_chart(add_ref(f3, 0.9), use_container_width=True, key="t3")
-            f4 = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='Reactor N/C (Design: 3.11)', line_shape='spline')
-            st.plotly_chart(add_ref(f4, 3.11), use_container_width=True, key="t4")
-
-        # ROW 2: Production & Efficiency Trends
-        st.markdown("<hr style='border:1px dashed #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
-        t3, t4 = st.columns(2)
-        with t3:
-            f5 = px.line(df_7d, x='Date', y='Production', markers=True, title='Daily Production Trend (MT)', line_shape='spline')
-            f5.update_traces(line_color='#2ca02c') 
-            st.plotly_chart(add_ref(f5), use_container_width=True, key="t5")
+            f2 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
+            f2.update_traces(line_color='#9467bd') 
+            st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
             
-            f6 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='Reactor CO2 Conversion Trend (%)', line_shape='spline')
-            f6.update_traces(line_color='#9467bd') 
-            st.plotly_chart(add_ref(f6, 58.0), use_container_width=True, key="t6")
-        with t4:
-            f7 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='Stripper Efficiency Trend (%)', line_shape='spline')
-            f7.update_traces(line_color='#d97706') 
-            st.plotly_chart(add_ref(f7, 78.0), use_container_width=True, key="t7")
+        # Row 2 of Graphs
+        with t1:
+            f3 = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
+            st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
+        with t2:
+            f4 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
+            f4.update_traces(line_color='#d97706') 
+            st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
             
-            f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='HPD Efficiency Trend (%)', line_shape='spline')
-            f8.update_traces(line_color='#1E3A8A') 
+        # Row 3 of Graphs
+        with t1:
+            f5 = px.line(df_7d, x='Date', y='Moisture', markers=True, title='5. Avg Moisture (Design: 0.3%)', line_shape='spline')
+            st.plotly_chart(add_ref(f5, 0.3), use_container_width=True, key="t5")
+        with t2:
+            f6 = px.line(df_7d, x='Date', y='Biuret', markers=True, title='6. Avg Biuret (Design: 0.9%)', line_shape='spline')
+            st.plotly_chart(add_ref(f6, 0.9), use_container_width=True, key="t6")
+            
+        # Row 4 of Graphs
+        with t1:
+            f7 = px.line(df_7d, x='Date', y='APS', markers=True, title='7. Avg APS Trend', line_shape='spline')
+            st.plotly_chart(add_ref(f7), use_container_width=True, key="t7")
+        with t2:
+            f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='8. HPD Efficiency Trend (%)', line_shape='spline')
+            f8.update_traces(line_color='#059669') 
             st.plotly_chart(add_ref(f8, 65.4), use_container_width=True, key="t8")
 
     else:
