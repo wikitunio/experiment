@@ -35,23 +35,32 @@ st.markdown("""
     
     /* CSS for Graphical Equipment Vessels */
     .vessel-reactor {
-        background: #e0e5ec;
-        border-radius: 30px 30px 10px 10px; /* Dome top */
-        border: 4px solid #1E3A8A;
-        padding: 20px;
-        box-shadow: inset 15px 0 20px rgba(0,0,0,0.08);
-        height: 100%;
+        background: #e0e5ec; border-radius: 30px 30px 10px 10px; border: 4px solid #1E3A8A;
+        padding: 20px; box-shadow: inset 15px 0 20px rgba(0,0,0,0.08); height: 100%;
     }
     .vessel-stripper {
-        background: #e0e5ec;
-        border-radius: 10px 10px 30px 30px; /* Funnel bottom */
-        border: 4px solid #d97706;
-        padding: 20px;
-        box-shadow: inset -15px 0 20px rgba(0,0,0,0.08);
-        height: 100%;
+        background: #e0e5ec; border-radius: 10px 10px 30px 30px; border: 4px solid #d97706;
+        padding: 20px; box-shadow: inset -15px 0 20px rgba(0,0,0,0.08); height: 100%;
     }
+    .vessel-hpd {
+        background: #e0e5ec; border-radius: 15px; border: 4px solid #059669;
+        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
+    }
+    .vessel-hpa {
+        background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0284c7;
+        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
+    }
+    .vessel-lpa {
+        background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0d9488;
+        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
+    }
+    
     .vessel-header-rx { background: #1E3A8A; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
     .vessel-header-st { background: #d97706; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
+    .vessel-header-hpd { background: #059669; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
+    .vessel-header-hpa { background: #0284c7; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
+    .vessel-header-lpa { background: #0d9488; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
+    
     .vessel-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #b0b0b0; padding: 6px 0; font-size: 15px; }
     .vessel-row:last-child { border-bottom: none; }
     </style>
@@ -115,6 +124,12 @@ def load_data():
         'LPA_NC': 'mean', 'LPA_HC': 'mean', 'Remarks': 'first'
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
+    
+    # --- THE FIX: Convert Decimal Efficiencies to True Percentages ---
+    for col in ['CO2_Conv', 'Stripper_Eff', 'HPD_Eff']:
+        if col in df_daily.columns:
+            df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
+            
     return df_daily.sort_values('Date'), ""
 
 df, err_msg = load_data()
@@ -124,7 +139,6 @@ if err_msg:
 elif not df.empty:
     st.sidebar.header("📅 Dashboard Controls")
     
-    # THE FIX: Default to Yesterday instead of Today
     yesterday = datetime.date.today() - timedelta(days=1)
     selected_date = st.sidebar.date_input("Select Shift Date", yesterday)
     selected_date_dt = pd.to_datetime(selected_date)
@@ -140,6 +154,7 @@ elif not df.empty:
         if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log:** {remarks}")
 
+        # --- SECTION 1: PRODUCTION & QUALITY ---
         st.markdown(f"<h3 class='section-header'>📊 Production & Quality ({selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{get_delta('Production'):.0f} MT")
@@ -148,21 +163,19 @@ elif not df.empty:
         c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
 
-        # --- GRAPHICAL VESSELS SECTION ---
+        # --- SECTION 2: GRAPHICAL VESSELS ---
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
         
-        co2_conv = get_val(daily_data, 'CO2_Conv')
-        if co2_conv > 0 and co2_conv <= 1.0: co2_conv *= 100 
-        
+        # Row 1: Reactor, Stripper, HPD
         v1, v2, v3 = st.columns([1, 1, 1])
         
         with v1:
             st.markdown(f"""
             <div class="vessel-reactor">
                 <div class="vessel-header-rx">Urea Reactor</div>
-                <div class="vessel-row"><span>Reactor N/C</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
+                <div class="vessel-row"><span>Reactor N/C (Ref: 3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
                 <div class="vessel-row"><span>Reactor H/C</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
-                <div class="vessel-row"><span>CO2 Conversion</span><b>{co2_conv:.1f}%</b></div>
+                <div class="vessel-row"><span>CO2 Conversion (Ref: 58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
                 <div class="vessel-row"><span>NH3 Conversion</span><b style="color:#d9534f;">N/A</b></div>
                 <div class="vessel-row"><span>Urea Concentration</span><b style="color:#d9534f;">N/A</b></div>
             </div>
@@ -172,23 +185,46 @@ elif not df.empty:
             st.markdown(f"""
             <div class="vessel-stripper">
                 <div class="vessel-header-st">Urea Stripper</div>
-                <div class="vessel-row"><span>Efficiency</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
+                <div class="vessel-row"><span>Efficiency (Ref: 78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
                 <div class="vessel-row"><span>Stripper N/C</span><b style="color:#d9534f;">N/A</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
+
         with v3:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.metric("HPA N/C (Design: 2.38)", f"{get_val(daily_data, 'HPA_NC'):.2f}")
-            st.metric("HPA H/C (Design: 1.289)", f"{get_val(daily_data, 'HPA_HC'):.2f}")
-            st.metric("LPA N/C (Design: 2.29)", f"{get_val(daily_data, 'LPA_NC'):.2f}")
-            st.metric("LPA H/C (Design: 2.28)", f"{get_val(daily_data, 'LPA_HC'):.2f}")
+            st.markdown(f"""
+            <div class="vessel-hpd">
+                <div class="vessel-header-hpd">High Pressure Decomposer (HPD)</div>
+                <div class="vessel-row"><span>Efficiency (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Row 2: HPA and LPA
+        v4, v5, v6 = st.columns([1, 1, 1])
+        with v4:
+            st.markdown(f"""
+            <div class="vessel-hpa">
+                <div class="vessel-header-hpa">High Pressure Absorber (HPA)</div>
+                <div class="vessel-row"><span>HPA N/C (Design: 2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
+                <div class="vessel-row"><span>HPA H/C (Design: 1.289)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
+            </div>
+            """, unsafe_allow_html=True)
+        with v5:
+            st.markdown(f"""
+            <div class="vessel-lpa">
+                <div class="vessel-header-lpa">Low Pressure Absorber (LPA)</div>
+                <div class="vessel-row"><span>LPA N/C (Design: 2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
+                <div class="vessel-row"><span>LPA H/C (Design: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # We leave v6 completely empty so the HPA and LPA take up exactly 1/3 of the screen each, aligning perfectly with the top row.
 
         # --- SECTION 3: EFFICIENCIES GAUGES ---
         st.markdown("<h3 class='section-header'>⚙️ Supporting Equipment</h3>", unsafe_allow_html=True)
-        g1, g2, g3 = st.columns(3)
+        g1, g2, g3 = st.columns(3) # Keeping 3 columns but only using 2, to keep sizes consistent
         def make_gauge(val):
-            if val > 0 and val <= 1.0: val *= 100
             fig = go.Figure(go.Indicator(
                 mode = "gauge+number", value = val,
                 number = {'suffix': "%", 'font': {'size': 26, 'color': '#1E3A8A'}},
@@ -198,11 +234,12 @@ elif not df.empty:
             return fig
             
         with g1: 
-            st.markdown("<div class='gauge-title'>HPD</div><div class='gauge-sub'>Design: 65.4%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True, key="hpd_gauge")
+            st.markdown("<div class='gauge-title'>Stripper Overview</div><div class='gauge-sub'>Design: 78.0%</div>", unsafe_allow_html=True)
+            st.plotly_chart(make_gauge(get_val(daily_data, 'Stripper_Eff')), use_container_width=True, key="strip_gauge")
         with g2: 
-            st.markdown("<div class='gauge-title'>LPD</div><div class='gauge-sub'>Design: 65.0%</div>", unsafe_allow_html=True)
-            st.plotly_chart(make_gauge(0), use_container_width=True, key="lpd_gauge") 
+            st.markdown("<div class='gauge-title'>HPD Overview</div><div class='gauge-sub'>Design: 65.4%</div>", unsafe_allow_html=True)
+            st.plotly_chart(make_gauge(get_val(daily_data, 'HPD_Eff')), use_container_width=True, key="hpd_gauge")
+        # g3 is empty because LPD was deleted.
 
         # --- SECTION 4: TRENDS ---
         week_start = selected_date_dt - timedelta(days=6)
@@ -228,24 +265,24 @@ elif not df.empty:
             f4 = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='Reactor N/C (Design: 3.11)', line_shape='spline')
             st.plotly_chart(add_ref(f4, 3.11), use_container_width=True, key="t4")
 
-        # ROW 2: NEW Production & Efficiency Trends
+        # ROW 2: Production & Efficiency Trends
         st.markdown("<hr style='border:1px dashed #e0e0e0; margin: 20px 0;'>", unsafe_allow_html=True)
         t3, t4 = st.columns(2)
         with t3:
             f5 = px.line(df_7d, x='Date', y='Production', markers=True, title='Daily Production Trend (MT)', line_shape='spline')
-            f5.update_traces(line_color='#2ca02c') # Green for production
+            f5.update_traces(line_color='#2ca02c') 
             st.plotly_chart(add_ref(f5), use_container_width=True, key="t5")
             
-            f6 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='Reactor CO2 Conversion Trend', line_shape='spline')
-            f6.update_traces(line_color='#9467bd') # Purple for conversion
-            st.plotly_chart(add_ref(f6, 0.58 if df_7d['CO2_Conv'].max() <= 1.0 else 58.0), use_container_width=True, key="t6")
+            f6 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='Reactor CO2 Conversion Trend (%)', line_shape='spline')
+            f6.update_traces(line_color='#9467bd') 
+            st.plotly_chart(add_ref(f6, 58.0), use_container_width=True, key="t6")
         with t4:
-            f7 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='Stripper Efficiency Trend', line_shape='spline')
-            f7.update_traces(line_color='#d97706') # Orange for Stripper
+            f7 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='Stripper Efficiency Trend (%)', line_shape='spline')
+            f7.update_traces(line_color='#d97706') 
             st.plotly_chart(add_ref(f7, 78.0), use_container_width=True, key="t7")
             
-            f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='HPD Efficiency Trend', line_shape='spline')
-            f8.update_traces(line_color='#1E3A8A') # Blue for HPD
+            f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='HPD Efficiency Trend (%)', line_shape='spline')
+            f8.update_traces(line_color='#1E3A8A') 
             st.plotly_chart(add_ref(f8, 65.4), use_container_width=True, key="t8")
 
     else:
