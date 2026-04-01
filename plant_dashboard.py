@@ -197,8 +197,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
-                <div class="v-row"><span>N/C (Ref: 3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (0.52)</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
                 <div class="v-row"><span>CO2 Conv (58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
                 <div class="v-row"><span>NH3 Conv (37%)</span><b>{get_val(daily_data, 'NH3_Conv'):.1f}%</b></div>
                 <div class="v-row"><span>Urea Conc(32.74%)</span><b>{get_val(daily_data, 'Urea_Conc'):.2f}%</b></div>
@@ -209,7 +209,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-st">
                 <div class="v-title v-title-st">🌪️ Stripper</div>
-                <div class="v-row"><span>Eff (Ref: 78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
                 <div class="v-row"><span>Stripper N/C (2.01)</span><b>{get_val(daily_data, 'Stripper_NC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
@@ -218,7 +218,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpd">
                 <div class="v-title v-title-hpd">🌡️ HPD</div>
-                <div class="v-row"><span>Eff (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -226,8 +226,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref: 1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -235,8 +235,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-lpa">
                 <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
 
