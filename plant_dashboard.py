@@ -102,18 +102,18 @@ def load_data():
         df_pq = df_pq.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check PQ Trends Sheet Format"
 
-    # 2. Load Efficiencies (Added Col C for NH3 Conv and Col H for Stripper N/C)
+    # 2. Load Efficiencies
     excel_data.seek(0)
     try:
         df_eff_raw = pd.read_excel(excel_data, sheet_name="Efficiencies", skiprows=2)
         df_eff = pd.DataFrame()
         df_eff['Date'] = pd.to_datetime(df_eff_raw.iloc[:, 0], errors='coerce')
         df_eff['CO2_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 1], errors='coerce').fillna(0)
-        df_eff['NH3_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 2], errors='coerce').fillna(0)  # Column C
+        df_eff['NH3_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 2], errors='coerce').fillna(0)  
         df_eff['Rx_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 3], errors='coerce').fillna(0)
         df_eff['Rx_HC'] = pd.to_numeric(df_eff_raw.iloc[:, 4], errors='coerce').fillna(0)
         df_eff['Stripper_Eff'] = pd.to_numeric(df_eff_raw.iloc[:, 6], errors='coerce').fillna(0)
-        df_eff['Stripper_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 7], errors='coerce').fillna(0) # Column H
+        df_eff['Stripper_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 7], errors='coerce').fillna(0) 
         df_eff['HPD_Eff'] = pd.to_numeric(df_eff_raw.iloc[:, 9], errors='coerce').fillna(0)
         df_eff['HPA_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 12], errors='coerce').fillna(0)
         df_eff['HPA_HC'] = pd.to_numeric(df_eff_raw.iloc[:, 13], errors='coerce').fillna(0)
@@ -122,20 +122,17 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
-    # 3. Load Lab Analysis Sheet (Added for Urea Conc in Col E)
+    # 3. Load Lab Analysis
     excel_data.seek(0)
     try:
-        # Assuming header starts on row 2 (skiprows=1). Adjust if needed.
         df_lab_raw = pd.read_excel(excel_data, sheet_name="Lab Analysis", skiprows=1)
         df_lab = pd.DataFrame()
         df_lab['Date'] = pd.to_datetime(df_lab_raw.iloc[:, 0], errors='coerce')
-        df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) # Column E
+        df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) 
         df_lab = df_lab.dropna(subset=['Date'])
     except Exception as e:
-        # If sheet is missing or named differently, don't crash the whole app
         df_lab = pd.DataFrame(columns=['Date', 'Urea_Conc'])
 
-    # Merge all three dataframes
     df_master = pd.merge(df_pq, df_eff, on='Date', how='left')
     if not df_lab.empty:
         df_master = pd.merge(df_master, df_lab, on='Date', how='left')
@@ -150,7 +147,6 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # Auto-convert decimals to percentages for specific columns
     for col in ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
@@ -197,8 +193,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
-                <div class="v-row"><span>N/C (3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (0.52)</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
                 <div class="v-row"><span>CO2 Conv (58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
                 <div class="v-row"><span>NH3 Conv (37%)</span><b>{get_val(daily_data, 'NH3_Conv'):.1f}%</b></div>
                 <div class="v-row"><span>Urea Conc(32.74%)</span><b>{get_val(daily_data, 'Urea_Conc'):.2f}%</b></div>
@@ -209,7 +205,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-st">
                 <div class="v-title v-title-st">🌪️ Stripper</div>
-                <div class="v-row"><span>Eff (78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (Ref: 78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
                 <div class="v-row"><span>Stripper N/C (2.01)</span><b>{get_val(daily_data, 'Stripper_NC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
@@ -218,7 +214,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpd">
                 <div class="v-title v-title-hpd">🌡️ HPD</div>
-                <div class="v-row"><span>Eff (65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -226,8 +222,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (Ref: 1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -235,15 +231,20 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-lpa">
                 <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (Ref: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
 
         # --- SECTION 3: TRENDS ---
-        week_start = selected_date_dt - timedelta(days=6)
-        st.markdown(f"<h3 class='section-header'>📈 One Week Trends ({week_start.strftime('%d %b')} to {selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
-        df_7d = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= week_start)]
+        st.markdown("<h3 class='section-header'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
+        
+        # Interactive Trend Slider
+        trend_days = st.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
+        trend_start = selected_date_dt - timedelta(days=trend_days - 1)
+        st.markdown(f"<p style='color:#666; font-size:14px; margin-top:-10px;'>Showing data from <b>{trend_start.strftime('%d %b %Y')}</b> to <b>{selected_date.strftime('%d %b %Y')}</b></p>", unsafe_allow_html=True)
+        
+        df_trend = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= trend_start)]
         
         def add_ref(fig, val=None):
             date_str = selected_date.strftime('%Y-%m-%d')
@@ -254,48 +255,32 @@ elif not df.empty:
 
         t1, t2 = st.columns(2)
         
+        # Row 1: Production and Load
         with t1:
-            f1 = px.line(df_7d, x='Date', y='Production', markers=True, title='1. Daily Production Trend (MT)', line_shape='spline')
+            f1 = px.line(df_trend, x='Date', y='Production', markers=True, title='1. Daily Production Trend (MT)', line_shape='spline')
             f1.update_traces(line_color='#2ca02c') 
             st.plotly_chart(add_ref(f1), use_container_width=True, key="t1")
         with t2:
-            f2 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
-            f2.update_traces(line_color='#9467bd') 
-            f2.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
+            f2 = px.line(df_trend, x='Date', y='Load', markers=True, title='2. Plant Load (%)', line_shape='spline')
+            f2.update_traces(line_color='#1f77b4') 
+            st.plotly_chart(add_ref(f2, 100.0), use_container_width=True, key="t2")
             
+        # Row 2: Reactor Conversion and Rx N/C
         with t1:
-            f3 = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
-            st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
+            f3 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='3. Reactor CO2 Conversion Trend (%)', line_shape='spline')
+            f3.update_traces(line_color='#9467bd') 
+            f3.update_yaxes(range=[0, 100])
+            st.plotly_chart(add_ref(f3, 58.0), use_container_width=True, key="t3")
         with t2:
-            f4 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
-            f4.update_traces(line_color='#d97706') 
-            f4.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
+            f4 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='4. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
+            st.plotly_chart(add_ref(f4, 3.11), use_container_width=True, key="t4")
             
+        # Row 3: Stripper and HPD Efficiency
         with t1:
-            f5 = px.line(df_7d, x='Date', y='Moisture', markers=True, title='5. Avg Moisture (Design: 0.3%)', line_shape='spline')
-            st.plotly_chart(add_ref(f5, 0.3), use_container_width=True, key="t5")
+            f5 = px.line(df_trend, x='Date', y='Stripper_Eff', markers=True, title='5. Stripper Efficiency Trend (%)', line_shape='spline')
+            f5.update_traces(line_color='#d97706') 
+            f5.update_yaxes(range=[0, 100])
+            st.plotly_chart(add_ref(f5, 78.0), use_container_width=True, key="t5")
         with t2:
-            f6 = px.line(df_7d, x='Date', y='Biuret', markers=True, title='6. Avg Biuret (Design: 0.9%)', line_shape='spline')
-            st.plotly_chart(add_ref(f6, 0.9), use_container_width=True, key="t6")
-            
-        with t1:
-            f7 = px.line(df_7d, x='Date', y='APS', markers=True, title='7. Avg APS Trend', line_shape='spline')
-            st.plotly_chart(add_ref(f7), use_container_width=True, key="t7")
-        with t2:
-            f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='8. HPD Efficiency Trend (%)', line_shape='spline')
-            f8.update_traces(line_color='#059669') 
-            f8.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f8, 65.4), use_container_width=True, key="t8")
-
-    else:
-        st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
-
-# -- FOOTER SECTION --
-st.markdown(f"""
-    <div class="footer">
-        Developed by <a href="https://www.linkedin.com/in/wikitunio" target="_blank">Waqar Ahmed Tunio</a> with Ai<br>
-        Email: <a href="mailto:ahmed.waqar@pafl.com.pk">ahmed.waqar@pafl.com.pk</a>
-    </div>
-    """, unsafe_allow_html=True)
+            f6 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='6. HPD Efficiency Trend (%)', line_shape='spline')
+            f6.update_traces(line_color='#059669')
