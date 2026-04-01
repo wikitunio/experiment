@@ -25,7 +25,7 @@ def get_base64_of_bin_file(bin_file):
 img_b64 = get_base64_of_bin_file("IMG_9291.JPG")
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("data:image/jpeg;base64,{img_b64}");' if img_b64 else 'background-color: #1E3A8A;'
 
-# -- CUSTOM CSS --
+# -- ULTRA-COMPACT CUSTOM CSS --
 st.markdown(f"""
     <style>
     .hero-container {{ {bg_css} background-size: cover; background-position: center; padding: 15px 20px; border-radius: 8px; color: white; text-align: center; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); }}
@@ -208,7 +208,8 @@ elif not df.empty:
         # --- SECTION 3: TRENDS ---
         st.markdown("<h3 class='section-header'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
         
-        trend_days = st.sidebar.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
+        # FIX: Slider moved back to the main section!
+        trend_days = st.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
         trend_start = selected_date_dt - timedelta(days=trend_days - 1)
         st.caption(f"Showing data from **{trend_start.strftime('%d %b %Y')}** to **{selected_date.strftime('%d %b %Y')}**")
         
@@ -232,55 +233,33 @@ elif not df.empty:
         st.plotly_chart(fig_combo, use_container_width=True, key="combo_prod_load")
 
         t1, t2 = st.columns(2)
-        
         with t1:
-            f2 = px.line(
-                df_trend, x='Date', y='CO2_Conv', markers=True, 
-                title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline'
-            )
+            f2 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
             f2.update_traces(line_color='#9467bd') 
             f2.update_yaxes(range=[0, 100])
             st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
             
-            f4 = px.line(
-                df_trend, x='Date', y='Stripper_Eff', markers=True, 
-                title='4. Stripper Efficiency Trend (%)', line_shape='spline'
-            )
+            f4 = px.line(df_trend, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
             f4.update_traces(line_color='#d97706') 
             f4.update_yaxes(range=[0, 100])
             st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
             
-            f6 = px.line(
-                df_trend, x='Date', y='Moisture', markers=True, 
-                title='6. Avg Moisture (Design: 0.3%)', line_shape='spline'
-            )
+            f6 = px.line(df_trend, x='Date', y='Moisture', markers=True, title='6. Avg Moisture (Design: 0.3%)', line_shape='spline')
             st.plotly_chart(add_ref(f6, 0.3), use_container_width=True, key="t6")
             
-            f8 = px.line(
-                df_trend, x='Date', y='APS', markers=True, 
-                title='8. Avg APS Trend', line_shape='spline'
-            )
+            f8 = px.line(df_trend, x='Date', y='APS', markers=True, title='8. Avg APS Trend', line_shape='spline')
             st.plotly_chart(add_ref(f8), use_container_width=True, key="t8")
 
         with t2:
-            f3 = px.line(
-                df_trend, x='Date', y='Rx_NC', markers=True, 
-                title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline'
-            )
+            f3 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
             st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
             
-            f5 = px.line(
-                df_trend, x='Date', y='HPD_Eff', markers=True, 
-                title='5. HPD Efficiency Trend (%)', line_shape='spline'
-            )
+            f5 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='5. HPD Efficiency Trend (%)', line_shape='spline')
             f5.update_traces(line_color='#059669') 
             f5.update_yaxes(range=[0, 100])
             st.plotly_chart(add_ref(f5, 65.4), use_container_width=True, key="t5")
             
-            f7 = px.line(
-                df_trend, x='Date', y='Biuret', markers=True, 
-                title='7. Avg Biuret (Design: 0.9%)', line_shape='spline'
-            )
+            f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
             st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
 
         # --- SECTION 4: CUSTOM TREND BUILDER & EXPORT ---
@@ -295,10 +274,7 @@ elif not df.empty:
             c_graph, c_stats = st.columns([3, 1])
             
             with c_graph:
-                fig_custom = px.line(
-                    df_trend, x='Date', y=selected_vars, markers=True, 
-                    title="Custom Trend Analysis", line_shape='spline'
-                )
+                fig_custom = px.line(df_trend, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
                 fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
                 st.plotly_chart(add_ref(fig_custom), use_container_width=True, key="custom_chart")
                 
@@ -306,7 +282,9 @@ elif not df.empty:
                 st.markdown("#### 📊 Period Summary")
                 summary_df = df_trend[selected_vars].agg(['mean', 'min', 'max']).T
                 summary_df.columns = ['Average', 'Minimum', 'Maximum']
-                st.dataframe(summary_df.style.format("{:.2f}").background_gradient(cmap='Blues'), use_container_width=True)
+                
+                # FIX: Removed the buggy background gradient dependency!
+                st.dataframe(summary_df.style.format("{:.2f}"), use_container_width=True)
                 
                 csv = df_trend[['Date'] + selected_vars].to_csv(index=False).encode('utf-8')
                 st.download_button(
