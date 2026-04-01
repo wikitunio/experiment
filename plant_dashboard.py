@@ -6,62 +6,62 @@ from datetime import timedelta
 import datetime
 import requests
 import io
+import base64
+import os
 
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
+# -- IMAGE ENCODER FOR STREAMLIT CLOUD --
+# This guarantees your plant image loads in the background without pathing issues
+@st.cache_data
+def get_base64_of_bin_file(bin_file):
+    if os.path.exists(bin_file):
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return ""
+
+img_b64 = get_base64_of_bin_file("IMG_9291.JPG")
+bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.7), rgba(0, 0, 50, 0.7)), url("data:image/jpeg;base64,{img_b64}");' if img_b64 else 'background-color: #1E3A8A;'
+
 # -- BEAUTIFUL CUSTOM CSS --
-st.markdown("""
+st.markdown(f"""
     <style>
-    .hero-container {
-        background-image: linear-gradient(rgba(0, 0, 50, 0.6), rgba(0, 0, 50, 0.6)), url("app/static/IMG_9291.JPG");
+    .hero-container {{
+        {bg_css}
         background-size: cover;
         background-position: center;
-        padding: 70px 20px;
-        border-radius: 15px;
+        padding: 25px 20px; /* Minimized Header Padding */
+        border-radius: 10px;
         color: white;
         text-align: center;
-        margin-bottom: 30px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.3);
-    }
-    .hero-container h1 { font-size: 40px; margin-bottom: 5px; color: white !important; }
-    .hero-container p { font-size: 18px; opacity: 0.9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    .section-header { color: #1E3A8A; margin-top: 35px; margin-bottom: 15px; font-weight: 700; border-bottom: 2px solid #1E3A8A; padding-bottom: 8px;}
-    .footer { text-align: center; padding: 40px 0px; color: #666666; font-size: 14px; border-top: 1px solid #e0e0e0; margin-top: 50px; }
-    .footer a { color: #1E3A8A; text-decoration: none; font-weight: bold; }
+        margin-bottom: 25px;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+    }}
+    .hero-container h1 {{ font-size: 28px; margin-bottom: 2px; color: white !important; font-weight: bold; }}
+    .hero-container p {{ font-size: 15px; opacity: 0.9; margin-bottom: 0px; }}
+    
+    .stMetric {{ background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }}
+    .section-header {{ color: #1E3A8A; margin-top: 30px; margin-bottom: 15px; font-weight: 700; border-bottom: 2px solid #1E3A8A; padding-bottom: 5px; }}
+    .footer {{ text-align: center; padding: 30px 0px; color: #666666; font-size: 14px; border-top: 1px solid #e0e0e0; margin-top: 40px; }}
+    .footer a {{ color: #1E3A8A; text-decoration: none; font-weight: bold; }}
     
     /* CSS for Graphical Equipment Vessels */
-    .vessel-reactor {
-        background: #e0e5ec; border-radius: 30px 30px 10px 10px; border: 4px solid #1E3A8A;
-        padding: 20px; box-shadow: inset 15px 0 20px rgba(0,0,0,0.08); height: 100%;
-    }
-    .vessel-stripper {
-        background: #e0e5ec; border-radius: 10px 10px 30px 30px; border: 4px solid #d97706;
-        padding: 20px; box-shadow: inset -15px 0 20px rgba(0,0,0,0.08); height: 100%;
-    }
-    .vessel-hpd {
-        background: #e0e5ec; border-radius: 15px; border: 4px solid #059669;
-        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
-    }
-    .vessel-hpa {
-        background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0284c7;
-        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
-    }
-    .vessel-lpa {
-        background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0d9488;
-        padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%;
-    }
+    .vessel-reactor {{ background: #e0e5ec; border-radius: 30px 30px 10px 10px; border: 4px solid #1E3A8A; padding: 20px; box-shadow: inset 15px 0 20px rgba(0,0,0,0.08); height: 100%; }}
+    .vessel-stripper {{ background: #e0e5ec; border-radius: 10px 10px 30px 30px; border: 4px solid #d97706; padding: 20px; box-shadow: inset -15px 0 20px rgba(0,0,0,0.08); height: 100%; }}
+    .vessel-hpd {{ background: #e0e5ec; border-radius: 15px; border: 4px solid #059669; padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%; }}
+    .vessel-hpa {{ background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0284c7; padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%; }}
+    .vessel-lpa {{ background: #e0e5ec; border-radius: 20px 20px 5px 5px; border: 4px solid #0d9488; padding: 20px; box-shadow: inset 10px 0 15px rgba(0,0,0,0.08); height: 100%; }}
     
-    .vessel-header-rx { background: #1E3A8A; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
-    .vessel-header-st { background: #d97706; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
-    .vessel-header-hpd { background: #059669; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
-    .vessel-header-hpa { background: #0284c7; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
-    .vessel-header-lpa { background: #0d9488; color: white; text-align: center; font-weight: bold; padding: 8px; border-radius: 5px; margin-bottom: 15px; }
-    .gauge-combo-title { text-align: center; font-size: 16px; font-weight: bold; color: #1E3A8A; margin-bottom: 0px; padding-top: 5px; }
+    .vessel-header-rx {{ background: #1E3A8A; color: white; text-align: center; font-weight: bold; padding: 6px; border-radius: 5px; margin-bottom: 12px; }}
+    .vessel-header-st {{ background: #d97706; color: white; text-align: center; font-weight: bold; padding: 6px; border-radius: 5px; margin-bottom: 12px; }}
+    .vessel-header-hpd {{ background: #059669; color: white; text-align: center; font-weight: bold; padding: 6px; border-radius: 5px; margin-bottom: 12px; }}
+    .vessel-header-hpa {{ background: #0284c7; color: white; text-align: center; font-weight: bold; padding: 6px; border-radius: 5px; margin-bottom: 12px; }}
+    .vessel-header-lpa {{ background: #0d9488; color: white; text-align: center; font-weight: bold; padding: 6px; border-radius: 5px; margin-bottom: 12px; }}
     
-    .vessel-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #b0b0b0; padding: 6px 0; font-size: 15px; }
-    .vessel-row:last-child { border-bottom: none; }
+    .vessel-row {{ display: flex; justify-content: space-between; border-bottom: 1px dashed #b0b0b0; padding: 5px 0; font-size: 14px; }}
+    .vessel-row:last-child {{ border-bottom: none; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -124,7 +124,6 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # Convert Decimals to Percentages
     for col in ['CO2_Conv', 'Stripper_Eff', 'HPD_Eff']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
@@ -165,9 +164,7 @@ elif not df.empty:
         # --- SECTION 2: GRAPHICAL VESSELS ---
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
         
-        # Row 1: Reactor, Stripper, HPD
         v1, v2, v3 = st.columns([1, 1, 1])
-        
         with v1:
             st.markdown(f"""
             <div class="vessel-reactor">
@@ -179,7 +176,6 @@ elif not df.empty:
                 <div class="vessel-row"><span>Urea Concentration</span><b style="color:#d9534f;">N/A</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
         with v2:
             st.markdown(f"""
             <div class="vessel-stripper">
@@ -188,7 +184,6 @@ elif not df.empty:
                 <div class="vessel-row"><span>Stripper N/C</span><b style="color:#d9534f;">N/A</b></div>
             </div>
             """, unsafe_allow_html=True)
-
         with v3:
             st.markdown(f"""
             <div class="vessel-hpd">
@@ -199,7 +194,6 @@ elif not df.empty:
             
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Row 2: HPA, LPA, and the New Combo Gauge!
         v4, v5, v6 = st.columns([1, 1, 1])
         with v4:
             st.markdown(f"""
@@ -217,29 +211,6 @@ elif not df.empty:
                 <div class="vessel-row"><span>LPA H/C (Design: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
-        with v6:
-            # THE FIX: Dual Gauge inside the synthesis loop section!
-            st.markdown("<div class='gauge-combo-title'>Equipment Efficiencies</div>", unsafe_allow_html=True)
-            fig_combo = go.Figure()
-            # Stripper (Left side)
-            fig_combo.add_trace(go.Indicator(
-                mode="gauge+number", value=get_val(daily_data, 'Stripper_Eff'),
-                title={'text': "Stripper", 'font': {'size': 14, 'color': '#666'}},
-                number={'suffix': "%", 'font': {'size': 20, 'color': '#1E3A8A'}},
-                domain={'x': [0, 0.45], 'y': [0, 1]},
-                gauge={'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#d97706"}, 'bgcolor': "#e0e0e0", 'borderwidth': 0}
-            ))
-            # HPD (Right side)
-            fig_combo.add_trace(go.Indicator(
-                mode="gauge+number", value=get_val(daily_data, 'HPD_Eff'),
-                title={'text': "HPD", 'font': {'size': 14, 'color': '#666'}},
-                number={'suffix': "%", 'font': {'size': 20, 'color': '#1E3A8A'}},
-                domain={'x': [0.55, 1], 'y': [0, 1]},
-                gauge={'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#059669"}, 'bgcolor': "#e0e0e0", 'borderwidth': 0}
-            ))
-            fig_combo.update_layout(height=180, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_combo, use_container_width=True, key="combo_gauge")
 
         # --- SECTION 3: TRENDS ---
         week_start = selected_date_dt - timedelta(days=6)
@@ -249,13 +220,12 @@ elif not df.empty:
         def add_ref(fig, val=None):
             date_str = selected_date.strftime('%Y-%m-%d')
             fig.add_vline(x=date_str, line_width=2, line_dash="dash", line_color="gray")
-            if val: fig.add_hline(y=val, line_dash="dot", line_color="red")
+            if val is not None: fig.add_hline(y=val, line_dash="dot", line_color="red")
             return fig
 
-        # THE FIX: Complete graph reordering to match your exact request
         t1, t2 = st.columns(2)
         
-        # Row 1 of Graphs
+        # Row 1
         with t1:
             f1 = px.line(df_7d, x='Date', y='Production', markers=True, title='1. Daily Production Trend (MT)', line_shape='spline')
             f1.update_traces(line_color='#2ca02c') 
@@ -263,18 +233,20 @@ elif not df.empty:
         with t2:
             f2 = px.line(df_7d, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
             f2.update_traces(line_color='#9467bd') 
+            f2.update_yaxes(range=[0, 100]) # THE FIX: Locks Y-Axis to 100%
             st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
             
-        # Row 2 of Graphs
+        # Row 2
         with t1:
             f3 = px.line(df_7d, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
             st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
         with t2:
             f4 = px.line(df_7d, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
             f4.update_traces(line_color='#d97706') 
+            f4.update_yaxes(range=[0, 100]) # THE FIX: Locks Y-Axis to 100%
             st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
             
-        # Row 3 of Graphs
+        # Row 3
         with t1:
             f5 = px.line(df_7d, x='Date', y='Moisture', markers=True, title='5. Avg Moisture (Design: 0.3%)', line_shape='spline')
             st.plotly_chart(add_ref(f5, 0.3), use_container_width=True, key="t5")
@@ -282,13 +254,14 @@ elif not df.empty:
             f6 = px.line(df_7d, x='Date', y='Biuret', markers=True, title='6. Avg Biuret (Design: 0.9%)', line_shape='spline')
             st.plotly_chart(add_ref(f6, 0.9), use_container_width=True, key="t6")
             
-        # Row 4 of Graphs
+        # Row 4
         with t1:
             f7 = px.line(df_7d, x='Date', y='APS', markers=True, title='7. Avg APS Trend', line_shape='spline')
             st.plotly_chart(add_ref(f7), use_container_width=True, key="t7")
         with t2:
             f8 = px.line(df_7d, x='Date', y='HPD_Eff', markers=True, title='8. HPD Efficiency Trend (%)', line_shape='spline')
             f8.update_traces(line_color='#059669') 
+            f8.update_yaxes(range=[0, 100]) # THE FIX: Locks Y-Axis to 100%
             st.plotly_chart(add_ref(f8, 65.4), use_container_width=True, key="t8")
 
     else:
