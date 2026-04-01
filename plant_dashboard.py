@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import timedelta
 import datetime
 import requests
@@ -27,42 +28,22 @@ bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50
 # -- ULTRA-COMPACT CUSTOM CSS --
 st.markdown(f"""
     <style>
-    .hero-container {{
-        {bg_css}
-        background-size: cover;
-        background-position: center;
-        padding: 15px 20px;
-        border-radius: 8px;
-        color: white;
-        text-align: center;
-        margin-bottom: 15px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-    }}
+    .hero-container {{ {bg_css} background-size: cover; background-position: center; padding: 15px 20px; border-radius: 8px; color: white; text-align: center; margin-bottom: 15px; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); }}
     .hero-container h1 {{ font-size: 26px; margin-bottom: 0px; margin-top: 0px; color: white !important; font-weight: bold; }}
     .hero-container p {{ font-size: 14px; opacity: 0.9; margin-bottom: 0px; margin-top: 2px; }}
-    
-    div[data-testid="metric-container"] {{
-        background-color: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 8px rgba(0,0,0,0.04);
-    }}
-    
+    div[data-testid="metric-container"] {{ background-color: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 8px rgba(0,0,0,0.04); }}
     .section-header {{ color: #1E3A8A; margin-top: 15px; margin-bottom: 10px; font-weight: 700; font-size: 20px; border-bottom: 2px solid #1E3A8A; padding-bottom: 4px; }}
-    
-    /* Sleek Horizontal Vessel Cards */
     .v-card {{ border-radius: 8px; padding: 12px; box-shadow: 2px 4px 10px rgba(0,0,0,0.06); min-height: 200px; border-top: 4px solid; display: flex; flex-direction: column; }}
     .v-rx {{ background: linear-gradient(135deg, #ffffff, #f1f5f9); border-top-color: #1E3A8A; }}
     .v-st {{ background: linear-gradient(135deg, #ffffff, #fffbeb); border-top-color: #d97706; }}
     .v-hpd {{ background: linear-gradient(135deg, #ffffff, #ecfdf5); border-top-color: #059669; }}
     .v-hpa {{ background: linear-gradient(135deg, #ffffff, #f0f9ff); border-top-color: #0284c7; }}
     .v-lpa {{ background: linear-gradient(135deg, #ffffff, #f0fdfa); border-top-color: #0d9488; }}
-    
     .v-title {{ font-size: 14px; font-weight: bold; margin-bottom: 10px; text-align: center; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); }}
     .v-title-rx {{ color: #1E3A8A; }} .v-title-st {{ color: #d97706; }} .v-title-hpd {{ color: #059669; }} .v-title-hpa {{ color: #0284c7; }} .v-title-lpa {{ color: #0d9488; }}
-    
     .v-row {{ display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed rgba(0,0,0,0.05); }}
     .v-row:last-child {{ border-bottom: none; }}
-    .v-row span {{ color: #555; }}
-    .v-row b {{ color: #111; }}
-    
+    .v-row span {{ color: #555; }} .v-row b {{ color: #111; }}
     .footer {{ text-align: center; padding: 20px 0px; color: #666666; font-size: 13px; border-top: 1px solid #e0e0e0; margin-top: 30px; }}
     .footer a {{ color: #1E3A8A; text-decoration: none; font-weight: bold; }}
     </style>
@@ -88,7 +69,6 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active."
 
-    # 1. Load PQ Trends
     try:
         df_pq_raw = pd.read_excel(excel_data, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
@@ -102,7 +82,6 @@ def load_data():
         df_pq = df_pq.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check PQ Trends Sheet Format"
 
-    # 2. Load Efficiencies
     excel_data.seek(0)
     try:
         df_eff_raw = pd.read_excel(excel_data, sheet_name="Efficiencies", skiprows=2)
@@ -122,7 +101,6 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
-    # 3. Load Lab Analysis
     excel_data.seek(0)
     try:
         df_lab_raw = pd.read_excel(excel_data, sheet_name="Lab Analysis", skiprows=1)
@@ -159,7 +137,6 @@ if err_msg:
     st.error(f"⚠️ {err_msg}")
 elif not df.empty:
     st.sidebar.header("📅 Dashboard Controls")
-    
     yesterday = datetime.date.today() - timedelta(days=1)
     selected_date = st.sidebar.date_input("Select Shift Date", yesterday)
     selected_date_dt = pd.to_datetime(selected_date)
@@ -175,7 +152,6 @@ elif not df.empty:
         if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log:** {remarks}")
 
-        # --- SECTION 1: PRODUCTION & QUALITY ---
         st.markdown(f"<h3 class='section-header'>📊 Production & Quality ({selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{get_delta('Production'):.0f} MT")
@@ -184,11 +160,8 @@ elif not df.empty:
         c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
 
-        # --- SECTION 2: SYNTHESIS LOOP & VESSELS ---
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
-        
         v1, v2, v3, v4, v5 = st.columns(5)
-        
         with v1:
             st.markdown(f"""
             <div class="v-card v-rx">
@@ -200,7 +173,6 @@ elif not df.empty:
                 <div class="v-row"><span>Urea Conc(32.74%)</span><b>{get_val(daily_data, 'Urea_Conc'):.2f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
         with v2:
             st.markdown(f"""
             <div class="v-card v-st">
@@ -209,7 +181,6 @@ elif not df.empty:
                 <div class="v-row"><span>Stripper N/C (2.01)</span><b>{get_val(daily_data, 'Stripper_NC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
-
         with v3:
             st.markdown(f"""
             <div class="v-card v-hpd">
@@ -217,7 +188,6 @@ elif not df.empty:
                 <div class="v-row"><span>Eff (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
         with v4:
             st.markdown(f"""
             <div class="v-card v-hpa">
@@ -226,7 +196,6 @@ elif not df.empty:
                 <div class="v-row"><span>H/C (Ref: 1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
-            
         with v5:
             st.markdown(f"""
             <div class="v-card v-lpa">
@@ -253,34 +222,71 @@ elif not df.empty:
             fig.update_layout(margin=dict(t=40, b=20, l=10, r=10), height=300)
             return fig
 
+        # 1. Dual Axis Chart: Production & Load (Spans full width)
+        fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Production'], name="Production (MT)", mode='lines+markers', line=dict(color='#2ca02c', width=3)), secondary_y=False)
+        fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Load'], name="Plant Load (%)", mode='lines+markers', line=dict(color='#1f77b4', width=3, dash='dot')), secondary_y=True)
+        fig_combo.update_layout(title_text="1. Production & Plant Load", margin=dict(t=40, b=20, l=10, r=10), height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_combo.update_yaxes(title_text="Production (MT)", secondary_y=False)
+        fig_combo.update_yaxes(title_text="Plant Load (%)", secondary_y=True)
+        
+        date_str_vline = selected_date.strftime('%Y-%m-%d')
+        fig_combo.add_vline(x=date_str_vline, line_width=2, line_dash="dash", line_color="gray")
+        st.plotly_chart(fig_combo, use_container_width=True, key="combo_prod_load")
+
+        # The rest of the 7 standard graphs in 2 columns
         t1, t2 = st.columns(2)
         
-        # Row 1: Production and Load
         with t1:
-            f1 = px.line(df_trend, x='Date', y='Production', markers=True, title='1. Daily Production Trend (MT)', line_shape='spline')
-            f1.update_traces(line_color='#2ca02c') 
-            st.plotly_chart(add_ref(f1), use_container_width=True, key="t1")
-        with t2:
-            f2 = px.line(df_trend, x='Date', y='Load', markers=True, title='2. Plant Load (%)', line_shape='spline')
-            f2.update_traces(line_color='#1f77b4') 
-            st.plotly_chart(add_ref(f2, 100.0), use_container_width=True, key="t2")
+            f2 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
+            f2.update_traces(line_color='#9467bd') 
+            f2.update_yaxes(range=[0, 100])
+            st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
             
-        # Row 2: Reactor Conversion and Rx N/C
-        with t1:
-            f3 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='3. Reactor CO2 Conversion Trend (%)', line_shape='spline')
-            f3.update_traces(line_color='#9467bd') 
-            f3.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f3, 58.0), use_container_width=True, key="t3")
-        with t2:
-            f4 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='4. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
-            st.plotly_chart(add_ref(f4, 3.11), use_container_width=True, key="t4")
+            f4 = px.line(df_trend, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
+            f4.update_traces(line_color='#d97706') 
+            f4.update_yaxes(range=[0, 100])
+            st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
             
-        # Row 3: Stripper and HPD Efficiency
-        with t1:
-            f5 = px.line(df_trend, x='Date', y='Stripper_Eff', markers=True, title='5. Stripper Efficiency Trend (%)', line_shape='spline')
-            f5.update_traces(line_color='#d97706') 
+            f6 = px.line(df_trend, x='Date', y='Moisture', markers=True, title='6. Avg Moisture (Design: 0.3%)', line_shape='spline')
+            st.plotly_chart(add_ref(f6, 0.3), use_container_width=True, key="t6")
+            
+            f8 = px.line(df_trend, x='Date', y='APS', markers=True, title='8. Avg APS Trend', line_shape='spline')
+            st.plotly_chart(add_ref(f8), use_container_width=True, key="t8")
+
+        with t2:
+            f3 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
+            st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
+            
+            f5 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='5. HPD Efficiency Trend (%)', line_shape='spline')
+            f5.update_traces(line_color='#059669') 
             f5.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f5, 78.0), use_container_width=True, key="t5")
-        with t2:
-            f6 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='6. HPD Efficiency Trend (%)', line_shape='spline')
-            f6.update_traces(line_color='#059669')
+            st.plotly_chart(add_ref(f5, 65.4), use_container_width=True, key="t5")
+            
+            f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
+            st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
+
+        # --- SECTION 4: CUSTOM TREND BUILDER ---
+        st.markdown("<hr style='border:1px dashed #e0e0e0; margin: 30px 0;'>", unsafe_allow_html=True)
+        st.markdown("<h3 class='section-header'>🛠️ Custom Trend Builder</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#666; font-size:14px; margin-top:-10px;'>Select multiple variables to plot them together on a single graph.</p>", unsafe_allow_html=True)
+        
+        # Exclude Date and text columns from the selector
+        available_vars = [col for col in df_trend.columns if col not in ['Date', 'Remarks']]
+        selected_vars = st.multiselect("Select Variables to Plot against Date:", available_vars, default=['Moisture', 'Biuret'])
+        
+        if selected_vars:
+            fig_custom = px.line(df_trend, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
+            fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
+            st.plotly_chart(add_ref(fig_custom), use_container_width=True, key="custom_chart")
+
+    else:
+        st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
+
+# -- FOOTER SECTION --
+st.markdown(f"""
+    <div class="footer">
+        Developed by <a href="https://www.linkedin.com/in/wikitunio" target="_blank">Waqar Ahmed Tunio</a> with Ai<br>
+        Email: <a href="mailto:ahmed.waqar@pafl.com.pk">ahmed.waqar@pafl.com.pk</a>
+    </div>
+    """, unsafe_allow_html=True)
