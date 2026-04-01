@@ -208,10 +208,9 @@ elif not df.empty:
         # --- SECTION 3: TRENDS ---
         st.markdown("<h3 class='section-header'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
         
-        # FIX: Slider moved back to the main section!
-        trend_days = st.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
+        trend_days = st.slider("Quick Lookback Window (Days)", min_value=3, max_value=30, value=7, step=1)
         trend_start = selected_date_dt - timedelta(days=trend_days - 1)
-        st.caption(f"Showing data from **{trend_start.strftime('%d %b %Y')}** to **{selected_date.strftime('%d %b %Y')}**")
+        st.caption(f"Showing standard operational trends from **{trend_start.strftime('%d %b %Y')}** to **{selected_date.strftime('%d %b %Y')}**")
         
         df_trend = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= trend_start)]
         
@@ -222,7 +221,6 @@ elif not df.empty:
             fig.update_layout(margin=dict(t=40, b=20, l=10, r=10), height=300)
             return fig
 
-        # Dual Axis Chart
         fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
         fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Production'], name="Production (MT)", mode='lines+markers', line=dict(color='#2ca02c', width=3)), secondary_y=False)
         fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Load'], name="Plant Load (%)", mode='lines+markers', line=dict(color='#1f77b4', width=3, dash='dot')), secondary_y=True)
@@ -265,35 +263,58 @@ elif not df.empty:
         # --- SECTION 4: CUSTOM TREND BUILDER & EXPORT ---
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🛠️ Custom Trend & Data Export</h3>", unsafe_allow_html=True)
-        st.caption("Select variables to plot them together on a single graph and view their summary statistics.")
+        st.caption("Select a custom time period and variables to plot them together and view their summary statistics.")
         
-        available_vars = [col for col in df_trend.columns if col not in ['Date', 'Remarks']]
-        selected_vars = st.multiselect("Select Variables:", available_vars, default=['Moisture', 'Biuret'])
-        
-        if selected_vars:
-            c_graph, c_stats = st.columns([3, 1])
+        c_ctrl1, c_ctrl2 = st.columns([1, 2])
+        with c_ctrl1:
+            min_date = df['Date'].min().date()
+            max_date = df['Date'].max().date()
+            default_start = max_date - timedelta(days=7)
             
-            with c_graph:
-                fig_custom = px.line(df_trend, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
-                fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
-                st.plotly_chart(add_ref(fig_custom), use_container_width=True, key="custom_chart")
+            # THE NEW TIME PERIOD SELECTOR IN DOWN SECTION
+            custom_dates = st.date_input(
+                "Select Exact Time Period:",
+                value=(default_start, max_date),
+                min_value=min_date,
+                max_value=max_date
+            )
+            
+        with c_ctrl2:
+            available_vars = [col for col in df.columns if col not in ['Date', 'Remarks']]
+            selected_vars = st.multiselect("Select Variables:", available_vars, default=['Moisture', 'Biuret'])
+        
+        if len(custom_dates) == 2 and selected_vars:
+            c_start, c_end = custom_dates
+            mask_custom = (df['Date'].dt.date >= c_start) & (df['Date'].dt.date <= c_end)
+            df_custom = df.loc[mask_custom]
+            
+            if not df_custom.empty:
+                c_graph, c_stats = st.columns([3, 1])
                 
-            with c_stats:
-                st.markdown("#### 📊 Period Summary")
-                summary_df = df_trend[selected_vars].agg(['mean', 'min', 'max']).T
-                summary_df.columns = ['Average', 'Minimum', 'Maximum']
-                
-                # FIX: Removed the buggy background gradient dependency!
-                st.dataframe(summary_df.style.format("{:.2f}"), use_container_width=True)
-                
-                csv = df_trend[['Date'] + selected_vars].to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download as CSV",
-                    data=csv,
-                    file_name=f"AgriTech_Plant_Data_{selected_date.strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                with c_graph:
+                    fig_custom = px.line(df_custom, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
+                    fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
+                    st.plotly_chart(fig_custom, use_container_width=True, key="custom_chart")
+                    
+                with c_stats:
+                    st.markdown("#### 📊 Period Summary")
+                    summary_df = df_custom[selected_vars].agg(['mean', 'min', 'max']).T
+                    summary_df.columns = ['Average', 'Minimum', 'Maximum']
+                    
+                    st.dataframe(summary_df.style.format("{:.2f}"), use_container_width=True)
+                    
+                    csv = df_custom[['Date'] + selected_vars].to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download Custom CSV",
+                        data=csv,
+                        file_name=f"AgriTech_Custom_Data_{c_start}_to_{c_end}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            else:
+                st.warning("No data found for this custom date range.")
+        elif len(custom_dates) < 2:
+            st.info("Please select an End Date for the custom time period.")
 
     else:
         st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
