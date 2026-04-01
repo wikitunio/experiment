@@ -27,27 +27,24 @@ bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50
 # -- ULTRA-COMPACT CUSTOM CSS --
 st.markdown(f"""
     <style>
-    /* Minimized Hero Header */
     .hero-container {{
         {bg_css}
         background-size: cover;
         background-position: center;
-        padding: 15px 20px; /* Greatly reduced padding */
+        padding: 15px 20px;
         border-radius: 8px;
         color: white;
         text-align: center;
-        margin-bottom: 15px; /* Reduced bottom margin */
+        margin-bottom: 15px;
         box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
     }}
     .hero-container h1 {{ font-size: 26px; margin-bottom: 0px; margin-top: 0px; color: white !important; font-weight: bold; }}
     .hero-container p {{ font-size: 14px; opacity: 0.9; margin-bottom: 0px; margin-top: 2px; }}
     
-    /* Compact Metrics */
     div[data-testid="metric-container"] {{
         background-color: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 8px rgba(0,0,0,0.04);
     }}
     
-    /* Tighter Section Headers */
     .section-header {{ color: #1E3A8A; margin-top: 15px; margin-bottom: 10px; font-weight: 700; font-size: 20px; border-bottom: 2px solid #1E3A8A; padding-bottom: 4px; }}
     
     /* Sleek Horizontal Vessel Cards */
@@ -91,6 +88,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active."
 
+    # 1. Load PQ Trends
     try:
         df_pq_raw = pd.read_excel(excel_data, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
@@ -104,15 +102,18 @@ def load_data():
         df_pq = df_pq.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check PQ Trends Sheet Format"
 
+    # 2. Load Efficiencies (Added Col C for NH3 Conv and Col H for Stripper N/C)
     excel_data.seek(0)
     try:
         df_eff_raw = pd.read_excel(excel_data, sheet_name="Efficiencies", skiprows=2)
         df_eff = pd.DataFrame()
         df_eff['Date'] = pd.to_datetime(df_eff_raw.iloc[:, 0], errors='coerce')
         df_eff['CO2_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 1], errors='coerce').fillna(0)
+        df_eff['NH3_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 2], errors='coerce').fillna(0)  # Column C
         df_eff['Rx_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 3], errors='coerce').fillna(0)
         df_eff['Rx_HC'] = pd.to_numeric(df_eff_raw.iloc[:, 4], errors='coerce').fillna(0)
         df_eff['Stripper_Eff'] = pd.to_numeric(df_eff_raw.iloc[:, 6], errors='coerce').fillna(0)
+        df_eff['Stripper_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 7], errors='coerce').fillna(0) # Column H
         df_eff['HPD_Eff'] = pd.to_numeric(df_eff_raw.iloc[:, 9], errors='coerce').fillna(0)
         df_eff['HPA_NC'] = pd.to_numeric(df_eff_raw.iloc[:, 12], errors='coerce').fillna(0)
         df_eff['HPA_HC'] = pd.to_numeric(df_eff_raw.iloc[:, 13], errors='coerce').fillna(0)
@@ -121,16 +122,36 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
+    # 3. Load Lab Analysis Sheet (Added for Urea Conc in Col E)
+    excel_data.seek(0)
+    try:
+        # Assuming header starts on row 2 (skiprows=1). Adjust if needed.
+        df_lab_raw = pd.read_excel(excel_data, sheet_name="Lab Analysis", skiprows=1)
+        df_lab = pd.DataFrame()
+        df_lab['Date'] = pd.to_datetime(df_lab_raw.iloc[:, 0], errors='coerce')
+        df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) # Column E
+        df_lab = df_lab.dropna(subset=['Date'])
+    except Exception as e:
+        # If sheet is missing or named differently, don't crash the whole app
+        df_lab = pd.DataFrame(columns=['Date', 'Urea_Conc'])
+
+    # Merge all three dataframes
     df_master = pd.merge(df_pq, df_eff, on='Date', how='left')
+    if not df_lab.empty:
+        df_master = pd.merge(df_master, df_lab, on='Date', how='left')
+    else:
+        df_master['Urea_Conc'] = 0.0
+
     agg_funcs = {
         'Production': 'sum', 'Load': 'mean', 'Moisture': 'mean', 'Biuret': 'mean',
-        'APS': 'mean', 'CO2_Conv': 'mean', 'Rx_NC': 'mean', 'Rx_HC': 'mean',
-        'Stripper_Eff': 'mean', 'HPD_Eff': 'mean', 'HPA_NC': 'mean', 'HPA_HC': 'mean',
-        'LPA_NC': 'mean', 'LPA_HC': 'mean', 'Remarks': 'first'
+        'APS': 'mean', 'CO2_Conv': 'mean', 'NH3_Conv': 'mean', 'Rx_NC': 'mean', 'Rx_HC': 'mean',
+        'Stripper_Eff': 'mean', 'Stripper_NC': 'mean', 'HPD_Eff': 'mean', 'HPA_NC': 'mean', 'HPA_HC': 'mean',
+        'LPA_NC': 'mean', 'LPA_HC': 'mean', 'Urea_Conc': 'mean', 'Remarks': 'first'
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    for col in ['CO2_Conv', 'Stripper_Eff', 'HPD_Eff']:
+    # Auto-convert decimals to percentages for specific columns
+    for col in ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
             
@@ -151,7 +172,7 @@ elif not df.empty:
     yesterday_data = df[df['Date'] == (selected_date_dt - timedelta(days=1))]
     
     if not daily_data.empty:
-        def get_val(data, col): return float(data[col].values[0]) if not data.empty else 0.0
+        def get_val(data, col): return float(data[col].values[0]) if not data.empty and col in data.columns else 0.0
         def get_delta(col): return get_val(daily_data, col) - get_val(yesterday_data, col)
 
         remarks = daily_data['Remarks'].values[0]
@@ -167,7 +188,7 @@ elif not df.empty:
         c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
 
-        # --- SECTION 2: SYNTHESIS LOOP & VESSELS (COMPACT 5-COLUMN GRID) ---
+        # --- SECTION 2: SYNTHESIS LOOP & VESSELS ---
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
         
         v1, v2, v3, v4, v5 = st.columns(5)
@@ -176,11 +197,11 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
-                <div class="v-row"><span>N/C (Ref:3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
                 <div class="v-row"><span>H/C</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
-                <div class="v-row"><span>CO2 Conv(58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
-                <div class="v-row"><span>NH3 Conv</span><b style="color:#d9534f;">N/A</b></div>
-                <div class="v-row"><span>Urea Conc</span><b style="color:#d9534f;">N/A</b></div>
+                <div class="v-row"><span>CO2 Conv (58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
+                <div class="v-row"><span>NH3 Conv (37%)</span><b>{get_val(daily_data, 'NH3_Conv'):.1f}%</b></div>
+                <div class="v-row"><span>Urea Conc(32.74%)</span><b>{get_val(daily_data, 'Urea_Conc'):.2f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -188,8 +209,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-st">
                 <div class="v-title v-title-st">🌪️ Stripper</div>
-                <div class="v-row"><span>Eff (Ref:78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
-                <div class="v-row"><span>Stripper N/C</span><b style="color:#d9534f;">N/A</b></div>
+                <div class="v-row"><span>Eff (Ref: 78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Stripper N/C (2.01)</span><b>{get_val(daily_data, 'Stripper_NC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -197,7 +218,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpd">
                 <div class="v-title v-title-hpd">🌡️ HPD</div>
-                <div class="v-row"><span>Eff (Ref:65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -205,8 +226,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (Ref:2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref:1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (Ref: 1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -214,8 +235,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-lpa">
                 <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (Ref:2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref:2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
+                <div class="v-row"><span>H/C (Ref: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
             </div>
             """, unsafe_allow_html=True)
 
