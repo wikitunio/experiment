@@ -267,14 +267,22 @@ elif not df.empty:
         
         c_ctrl1, c_ctrl2 = st.columns([1, 2])
         with c_ctrl1:
+            # FIX: We now explicitly force the default custom date range to strictly anchor to 
+            # the current sidebar 'Shift Date', avoiding any future Excel typos.
             min_date = df['Date'].min().date()
             max_date = df['Date'].max().date()
-            default_start = max_date - timedelta(days=7)
             
-            # THE NEW TIME PERIOD SELECTOR IN DOWN SECTION
+            default_end = selected_date_dt.date()
+            if default_end > max_date: 
+                default_end = max_date
+            
+            default_start = default_end - timedelta(days=6)
+            if default_start < min_date: 
+                default_start = min_date
+            
             custom_dates = st.date_input(
                 "Select Exact Time Period:",
-                value=(default_start, max_date),
+                value=(default_start, default_end),
                 min_value=min_date,
                 max_value=max_date
             )
