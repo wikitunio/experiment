@@ -69,6 +69,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active."
 
+
     try:
         df_pq_raw = pd.read_excel(excel_data, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
@@ -208,10 +209,9 @@ elif not df.empty:
         # --- SECTION 3: TRENDS ---
         st.markdown("<h3 class='section-header'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
         
-        # Interactive Trend Slider
-        trend_days = st.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
+        trend_days = st.sidebar.slider("Select Trend Window (Days)", min_value=3, max_value=30, value=7, step=1)
         trend_start = selected_date_dt - timedelta(days=trend_days - 1)
-        st.markdown(f"<p style='color:#666; font-size:14px; margin-top:-10px;'>Showing data from <b>{trend_start.strftime('%d %b %Y')}</b> to <b>{selected_date.strftime('%d %b %Y')}</b></p>", unsafe_allow_html=True)
+        st.caption(f"Showing data from **{trend_start.strftime('%d %b %Y')}** to **{selected_date.strftime('%d %b %Y')}**")
         
         df_trend = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= trend_start)]
         
@@ -222,21 +222,17 @@ elif not df.empty:
             fig.update_layout(margin=dict(t=40, b=20, l=10, r=10), height=300)
             return fig
 
-        # 1. Dual Axis Chart: Production & Load (Spans full width)
+        # Dual Axis Chart
         fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
         fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Production'], name="Production (MT)", mode='lines+markers', line=dict(color='#2ca02c', width=3)), secondary_y=False)
         fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Load'], name="Plant Load (%)", mode='lines+markers', line=dict(color='#1f77b4', width=3, dash='dot')), secondary_y=True)
         fig_combo.update_layout(title_text="1. Production & Plant Load", margin=dict(t=40, b=20, l=10, r=10), height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         fig_combo.update_yaxes(title_text="Production (MT)", secondary_y=False)
         fig_combo.update_yaxes(title_text="Plant Load (%)", secondary_y=True)
-        
-        date_str_vline = selected_date.strftime('%Y-%m-%d')
-        fig_combo.add_vline(x=date_str_vline, line_width=2, line_dash="dash", line_color="gray")
+        fig_combo.add_vline(x=selected_date.strftime('%Y-%m-%d'), line_width=2, line_dash="dash", line_color="gray")
         st.plotly_chart(fig_combo, use_container_width=True, key="combo_prod_load")
 
-        # The rest of the 7 standard graphs in 2 columns
         t1, t2 = st.columns(2)
-        
         with t1:
             f2 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
             f2.update_traces(line_color='#9467bd') 
@@ -255,38 +251,4 @@ elif not df.empty:
             st.plotly_chart(add_ref(f8), use_container_width=True, key="t8")
 
         with t2:
-            f3 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
-            st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
-            
-            f5 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='5. HPD Efficiency Trend (%)', line_shape='spline')
-            f5.update_traces(line_color='#059669') 
-            f5.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f5, 65.4), use_container_width=True, key="t5")
-            
-            f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
-            st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
-
-        # --- SECTION 4: CUSTOM TREND BUILDER ---
-        st.markdown("<hr style='border:1px dashed #e0e0e0; margin: 30px 0;'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='section-header'>🛠️ Custom Trend Builder</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#666; font-size:14px; margin-top:-10px;'>Select multiple variables to plot them together on a single graph.</p>", unsafe_allow_html=True)
-        
-        # Exclude Date and text columns from the selector
-        available_vars = [col for col in df_trend.columns if col not in ['Date', 'Remarks']]
-        selected_vars = st.multiselect("Select Variables to Plot against Date:", available_vars, default=['Moisture', 'Biuret'])
-        
-        if selected_vars:
-            fig_custom = px.line(df_trend, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
-            fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
-            st.plotly_chart(add_ref(fig_custom), use_container_width=True, key="custom_chart")
-
-    else:
-        st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
-
-# -- FOOTER SECTION --
-st.markdown(f"""
-    <div class="footer">
-        Developed by <a href="https://www.linkedin.com/in/wikitunio" target="_blank">Waqar Ahmed Tunio</a> with Ai<br>
-        Email: <a href="mailto:ahmed.waqar@pafl.com.pk">ahmed.waqar@pafl.com.pk</a>
-    </div>
-    """, unsafe_allow_html=True)
+            f3 = px.line(df_trend,
