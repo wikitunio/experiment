@@ -51,7 +51,6 @@ st.markdown("""
 # --- DAUDKHEL WEATHER API FETCH (CACHED FOR 15 MINS) ---
 @st.cache_data(ttl=900)
 def get_daudkhel_weather():
-    # Free unauthenticated API fetching current temp and humidity for Daudkhel coordinates
     url = "https://api.open-meteo.com/v1/forecast?latitude=32.88&longitude=71.54&current=temperature_2m,relative_humidity_2m"
     try:
         r = requests.get(url, timeout=5).json()
@@ -145,7 +144,6 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # Equilibrium Model
     def calc_theo_conv(row):
         if row['Rx_NC'] == 0 or row['Rx_HC'] == 0: return 0.0
         return 62.0 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 1.29) * 6.0
@@ -385,7 +383,7 @@ elif not df.empty:
         elif len(custom_dates) < 2:
             st.info("Please select an End Date for the custom time period.")
 
-        # --- SECTION 5: AI & PREDICTIVE ANALYTICS (MOVED TO BOTTOM) ---
+        # --- SECTION 5: AI & PREDICTIVE ANALYTICS ---
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
         c_ai1, c_ai2 = st.columns([1, 1])
@@ -416,8 +414,16 @@ elif not df.empty:
                 st.warning("Not enough valid historical data to generate prediction.")
                 
         with c_ai2:
-            st.markdown("#### 🌧️ Prilling Tower Cooling Predictor (U-1A301)")
-            st.caption("Estimates Moisture deviation based on real-time ambient weather sucked into the louvers.")
+            # THE FIX: ADVANCED AERODYNAMIC DRAFT MODEL
+            st.markdown("#### 🌧️ Prilling Tower Aerodynamic Predictor (U-1A301)")
+            st.caption("Estimates Moisture deviation based on real-time ambient weather and tower aerodynamics (Induced Draft + Dust Recovery friction).")
+            
+            # New Input Controls for Draft Parameters
+            col_w, col_f = st.columns(2)
+            with col_w:
+                win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m² (Material: C.S. + Galv.)")
+            with col_f:
+                fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
             
             temp, hum = get_daudkhel_weather()
             
@@ -429,20 +435,23 @@ elif not df.empty:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Empirical Moisture Estimator (Base 0.25% + temp penalty + humidity penalty)
+                # Empirical Moisture Estimator
                 base_moist = 0.25
                 temp_penalty = max(0, (temp - 25) * 0.002)
                 hum_penalty = max(0, (hum - 40) * 0.0015)
                 load_penalty = max(0, (get_val(daily_data, 'Load') - 100) * 0.001)
                 
-                est_moisture = base_moist + temp_penalty + hum_penalty + load_penalty
+                # Aerodynamic Draft Penalties (Dust recovery limits draft, requiring more fan/vane opening)
+                draft_penalty = max(0, (100 - fan_open) * 0.0005) + max(0, (100 - win_open) * 0.0008)
+                
+                est_moisture = base_moist + temp_penalty + hum_penalty + load_penalty + draft_penalty
                 
                 if est_moisture > 0.3:
-                    st.error(f"⚠️ **Warning:** Current ambient conditions severely reduce U-1A301 cooling draft. Estimated product moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Monitor Scraper and Belt Scale.")
+                    st.error(f"⚠️ **Warning:** Insufficient cooling draft for current weather. Estimated product moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Consider increasing Fan or Vane opening.")
                 elif est_moisture > 0.28:
                     st.warning(f"⚡ **Alert:** Cooling efficiency is dropping. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
                 else:
-                    st.success(f"✅ **Optimal:** Ambient conditions are favorable for natural draft cooling. Estimated moisture: **{est_moisture:.3f}%**.")
+                    st.success(f"✅ **Optimal:** Favorable draft and ambient conditions. Estimated moisture: **{est_moisture:.3f}%**.")
             else:
                 st.error("Failed to connect to weather API. Please check server outbound rules.")
 
