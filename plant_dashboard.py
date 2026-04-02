@@ -7,9 +7,11 @@ from datetime import timedelta
 import datetime
 import requests
 import io
+import base64
+import os
 
 # -- PAGE CONFIGURATION --
-st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
 # -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
 # Replace YOUR_GITHUB_USERNAME with your actual GitHub username (e.g., Ahmed-Waqar-Tunio)
@@ -34,9 +36,10 @@ st.markdown(f"""
     .v-lpa {{ background: linear-gradient(135deg, #ffffff, #f0fdfa); border-top-color: #0d9488; }}
     .v-title {{ font-size: 14px; font-weight: bold; margin-bottom: 10px; text-align: center; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.1); }}
     .v-title-rx {{ color: #1E3A8A; }} .v-title-st {{ color: #d97706; }} .v-title-hpd {{ color: #059669; }} .v-title-hpa {{ color: #0284c7; }} .v-title-lpa {{ color: #0d9488; }}
-    .v-row {{ display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed rgba(0,0,0,0.05); }}
+    .v-row {{ display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed rgba(0,0,0,0.05); }}
     .v-row:last-child {{ border-bottom: none; }}
-    .v-row span {{ color: #555; }} .v-row b {{ color: #111; }}
+    .v-row span {{ color: #555; }} .v-row b {{ color: #111; display: flex; align-items: center; gap: 4px; }}
+    .delta-badge {{ font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; }}
     .footer {{ text-align: center; padding: 20px 0px; color: #666666; font-size: 13px; border-top: 1px solid #e0e0e0; margin-top: 30px; }}
     .footer a {{ color: #1E3A8A; text-decoration: none; font-weight: bold; }}
     </style>
@@ -63,7 +66,12 @@ def load_data():
         return pd.DataFrame(), f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active."
 
     try:
-        df_pq_raw = pd.read_excel(excel_data, sheet_name="PQ Trends", skiprows=1)
+        xls = pd.ExcelFile(excel_data)
+    except Exception as e:
+        return pd.DataFrame(), f"Error reading Excel structure: {e}"
+
+    try:
+        df_pq_raw = pd.read_excel(xls, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
         df_pq['Date'] = pd.to_datetime(df_pq_raw.iloc[:, 0], errors='coerce')
         df_pq['Production'] = pd.to_numeric(df_pq_raw.iloc[:, 1], errors='coerce').fillna(0)
@@ -75,9 +83,8 @@ def load_data():
         df_pq = df_pq.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check PQ Trends Sheet Format"
 
-    excel_data.seek(0)
     try:
-        df_eff_raw = pd.read_excel(excel_data, sheet_name="Efficiencies", skiprows=2)
+        df_eff_raw = pd.read_excel(xls, sheet_name="Efficiencies", skiprows=2)
         df_eff = pd.DataFrame()
         df_eff['Date'] = pd.to_datetime(df_eff_raw.iloc[:, 0], errors='coerce')
         df_eff['CO2_Conv'] = pd.to_numeric(df_eff_raw.iloc[:, 1], errors='coerce').fillna(0)
@@ -94,9 +101,8 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
-    excel_data.seek(0)
     try:
-        df_lab_raw = pd.read_excel(excel_data, sheet_name="Lab Analysis", skiprows=1)
+        df_lab_raw = pd.read_excel(xls, sheet_name="Lab Analysis", skiprows=1)
         df_lab = pd.DataFrame()
         df_lab['Date'] = pd.to_datetime(df_lab_raw.iloc[:, 0], errors='coerce')
         df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) 
@@ -153,48 +159,68 @@ elif not df.empty:
         c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
 
+        # --- THE FIX: Custom Function to Generate HTML Deltas for Vessels ---
+        def html_val(col, decimals=2, is_pct=False):
+            val = get_val(daily_data, col)
+            delta = get_delta(col)
+            
+            val_str = f"{val:.{decimals}f}"
+            if is_pct: val_str += "%"
+            
+            if yesterday_data.empty or round(delta, decimals) == 0:
+                return f"<b>{val_str} <span class='delta-badge' style='background:#f3f4f6; color:#9ca3af;'>-</span></b>"
+                
+            delta_val = round(delta, decimals)
+            d_str = f"{abs(delta_val):.{decimals}f}"
+            if is_pct: d_str += "%"
+            
+            if delta_val > 0:
+                return f"<b>{val_str} <span class='delta-badge' style='background:#dcfce7; color:#16a34a;'>▲ {d_str}</span></b>"
+            else:
+                return f"<b>{val_str} <span class='delta-badge' style='background:#fee2e2; color:#dc2626;'>▼ {d_str}</span></b>"
+
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
         v1, v2, v3, v4, v5 = st.columns(5)
         with v1:
             st.markdown(f"""
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
-                <div class="v-row"><span>N/C (Ref: 3.11)</span><b>{get_val(daily_data, 'Rx_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C</span><b>{get_val(daily_data, 'Rx_HC'):.2f}</b></div>
-                <div class="v-row"><span>CO2 Conv (58%)</span><b>{get_val(daily_data, 'CO2_Conv'):.1f}%</b></div>
-                <div class="v-row"><span>NH3 Conv (37%)</span><b>{get_val(daily_data, 'NH3_Conv'):.1f}%</b></div>
-                <div class="v-row"><span>Urea Conc(32.74%)</span><b>{get_val(daily_data, 'Urea_Conc'):.2f}%</b></div>
+                <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
+                <div class="v-row"><span>H/C</span>{html_val('Rx_HC', 2)}</div>
+                <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
+                <div class="v-row"><span>NH3 Conv (37%)</span>{html_val('NH3_Conv', 1, True)}</div>
+                <div class="v-row"><span>Urea Conc(32.74%)</span>{html_val('Urea_Conc', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v2:
             st.markdown(f"""
             <div class="v-card v-st">
                 <div class="v-title v-title-st">🌪️ Stripper</div>
-                <div class="v-row"><span>Eff (Ref: 78%)</span><b>{get_val(daily_data, 'Stripper_Eff'):.1f}%</b></div>
-                <div class="v-row"><span>Stripper N/C (2.01)</span><b>{get_val(daily_data, 'Stripper_NC'):.2f}</b></div>
+                <div class="v-row"><span>Eff (Ref: 78%)</span>{html_val('Stripper_Eff', 1, True)}</div>
+                <div class="v-row"><span>Stripper N/C (2.01)</span>{html_val('Stripper_NC', 2)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v3:
             st.markdown(f"""
             <div class="v-card v-hpd">
                 <div class="v-title v-title-hpd">🌡️ HPD</div>
-                <div class="v-row"><span>Eff (Ref: 65.4%)</span><b>{get_val(daily_data, 'HPD_Eff'):.1f}%</b></div>
+                <div class="v-row"><span>Eff (Ref: 65.4%)</span>{html_val('HPD_Eff', 1, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v4:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.38)</span><b>{get_val(daily_data, 'HPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref: 1.29)</span><b>{get_val(daily_data, 'HPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.38)</span>{html_val('HPA_NC', 2)}</div>
+                <div class="v-row"><span>H/C (Ref: 1.29)</span>{html_val('HPA_HC', 2)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v5:
             st.markdown(f"""
             <div class="v-card v-lpa">
                 <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.29)</span><b>{get_val(daily_data, 'LPA_NC'):.2f}</b></div>
-                <div class="v-row"><span>H/C (Ref: 2.28)</span><b>{get_val(daily_data, 'LPA_HC'):.2f}</b></div>
+                <div class="v-row"><span>N/C (Ref: 2.29)</span>{html_val('LPA_NC', 2)}</div>
+                <div class="v-row"><span>H/C (Ref: 2.28)</span>{html_val('LPA_HC', 2)}</div>
             </div>
             """, unsafe_allow_html=True)
 
