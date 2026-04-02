@@ -151,7 +151,6 @@ elif not df.empty:
         selected_date = st.date_input("Shift Date", yesterday, label_visibility="collapsed")
         
     with c_title:
-        # THE FIX: Applies the exact 'section-header' class for perfect matching font/format
         st.markdown(f"<h3 class='section-header' style='border-bottom: none; margin-bottom: 0px; padding-bottom: 0px;'>📊 Production & Quality ({selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
     
     st.markdown("<div style='border-bottom: 2px solid #1E3A8A; padding-bottom: 5px; margin-bottom: 15px;'></div>", unsafe_allow_html=True)
@@ -162,27 +161,45 @@ elif not df.empty:
     
     if not daily_data.empty:
         def get_val(data, col): return float(data[col].values[0]) if not data.empty and col in data.columns else 0.0
-        def get_delta(col): return get_val(daily_data, col) - get_val(yesterday_data, col)
+        
+        # --- THE FIX: SMART DELTA ---
+        # If yesterday's value was 0, it means missing data. This prevents massive fake spikes.
+        def get_delta_val(col):
+            y_val = get_val(yesterday_data, col)
+            if yesterday_data.empty or y_val == 0:
+                return None
+            return get_val(daily_data, col) - y_val
 
         remarks = daily_data['Remarks'].values[0]
         if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log:** {remarks}")
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{get_delta('Production'):.0f} MT")
-        c2.metric("Plant Load", f"{get_val(daily_data, 'Load'):.1f} %", f"{get_delta('Load'):.1f} %")
-        c3.metric("Moisture", f"{get_val(daily_data, 'Moisture'):.3f} %", f"{get_delta('Moisture'):.3f} %", delta_color="inverse")
-        c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
-        c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
+        # Safely handle the metric formatting if Smart Delta returns None
+        d_prod = get_delta_val('Production')
+        c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{d_prod:.0f} MT" if d_prod is not None else None)
+        
+        d_load = get_delta_val('Load')
+        c2.metric("Plant Load", f"{get_val(daily_data, 'Load'):.1f} %", f"{d_load:.1f} %" if d_load is not None else None)
+        
+        d_moist = get_delta_val('Moisture')
+        c3.metric("Moisture", f"{get_val(daily_data, 'Moisture'):.3f} %", f"{d_moist:.3f} %" if d_moist is not None else None, delta_color="inverse")
+        
+        d_biuret = get_delta_val('Biuret')
+        c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{d_biuret:.2f} %" if d_biuret is not None else None, delta_color="inverse")
+        
+        d_aps = get_delta_val('APS')
+        c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{d_aps:.2f} mm" if d_aps is not None else None)
 
         def html_val(col, decimals=2, is_pct=False):
             val = get_val(daily_data, col)
-            delta = get_delta(col)
+            delta = get_delta_val(col)
             
             val_str = f"{val:.{decimals}f}"
             if is_pct: val_str += "%"
             
-            if yesterday_data.empty or round(delta, decimals) == 0:
+            # If the Smart Delta returned None (because yesterday was 0), show a neutral dash
+            if delta is None or round(delta, decimals) == 0:
                 return f"<b>{val_str} <span class='delta-badge' style='background:#f3f4f6; color:#9ca3af;'>-</span></b>"
                 
             delta_val = round(delta, decimals)
