@@ -38,6 +38,7 @@ st.markdown(f"""
     .delta-badge {{ font-size: 10px; padding: 2px 4px; border-radius: 4px; font-weight: bold; }}
     .footer {{ text-align: center; padding: 20px 0px; color: #666666; font-size: 13px; border-top: 1px solid #e0e0e0; margin-top: 30px; }}
     .footer a {{ color: #1E3A8A; text-decoration: none; font-weight: bold; }}
+    .sim-panel {{ background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -386,44 +387,73 @@ elif not df.empty:
         # --- SECTION 5: AI & PREDICTIVE ANALYTICS ---
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
+        
+        # Master Control Panel for Thermodynamic Simulation
+        st.markdown("""
+        <div class="sim-panel">
+            <h4 style="margin-top:0px; color:#334155;">🎛️ Real-Time Process Simulator</h4>
+            <p style="font-size:13px; color:#64748b;">Adjust physical plant parameters below to simulate the immediate impact on product Quality (Biuret) and Cooling (Moisture).</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 4-Column Layout for Inputs
+        sim1, sim2, sim3, sim4 = st.columns(4)
+        with sim1:
+            win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m²")
+        with sim2:
+            fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
+        with sim3:
+            melt_temp = st.slider("Melt Temp (°C)", min_value=132.0, max_value=145.0, value=138.0, step=0.5, help="Temp of Urea melt going to Prilling Tower")
+        with sim4:
+            vac_abs = st.slider("Vacuum (mmHg Abs)", min_value=10.0, max_value=80.0, value=30.0, step=1.0, help="Absolute pressure of Final Concentrator")
+
+        st.markdown("<br>", unsafe_allow_html=True)
         c_ai1, c_ai2 = st.columns([1, 1])
         
         with c_ai1:
-            st.markdown("#### 🎯 Biuret Predictor (Quality vs Load)")
-            st.caption("Linear regression mapping Plant Load directly against product Biuret formation.")
+            st.markdown("#### 🎯 Dynamic Biuret Predictor")
+            st.caption("Predicts Biuret formation based on Historical Plant Load + Vacuum Distillation + Melt Temperature.")
             
             df_clean = df[(df['Load'] > 0) & (df['Biuret'] > 0)].dropna(subset=['Load', 'Biuret'])
             
             if len(df_clean) > 2:
                 z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
                 p = np.poly1d(z)
+                current_load = get_val(daily_data, 'Load')
+                
+                # Base historic prediction based on load
+                base_pred_biuret = p(current_load)
+                
+                # Thermodynamic Penalties
+                # 1. Higher temp = faster biuret reaction
+                temp_biuret_penalty = (melt_temp - 138.0) * 0.015 
+                # 2. Poorer vacuum (higher absolute pressure) = higher boiling point required = more biuret
+                vac_biuret_penalty = (vac_abs - 30.0) * 0.005
+                
+                simulated_biuret = base_pred_biuret + temp_biuret_penalty + vac_biuret_penalty
                 
                 fig_pred = go.Figure()
-                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Actual Data', marker=dict(size=8, color='#1E3A8A', opacity=0.6)))
+                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Historical Data', marker=dict(size=8, color='#e2e8f0', opacity=0.6)))
                 
                 x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
-                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trendline', line=dict(color='red', dash='dash')))
+                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Baseline Trend', line=dict(color='#94a3b8', dash='dash')))
                 
-                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=False)
+                # Plot the actively simulated point
+                fig_pred.add_trace(go.Scatter(x=[current_load], y=[simulated_biuret], mode='markers', name='Simulated State', marker=dict(size=14, color='red', symbol='star')))
+                
+                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
                 
-                slope = z[0]
-                insight = "increases" if slope > 0 else "decreases"
-                st.info(f"💡 **Insight:** Historically, for every **1% increase** in Plant Load, Biuret **{insight} by {abs(slope):.4f}%**.")
+                if simulated_biuret > 0.9:
+                    st.error(f"⚠️ **Warning:** Predicted Biuret is **{simulated_biuret:.2f}%**. To reduce it, try improving concentrator vacuum below {vac_abs} mmHg Abs or dropping melt temp.")
+                else:
+                    st.success(f"✅ **Safe Quality:** Predicted Biuret is **{simulated_biuret:.2f}%** (Well below 0.9% design limit).")
             else:
                 st.warning("Not enough valid historical data to generate prediction.")
                 
         with c_ai2:
-            # THE FIX: ADVANCED AERODYNAMIC DRAFT MODEL
-            st.markdown("#### 🌧️ Prilling Tower Aerodynamic Predictor (U-1A301)")
-            st.caption("Estimates Moisture deviation based on real-time ambient weather and tower aerodynamics (Induced Draft + Dust Recovery friction).")
-            
-            # New Input Controls for Draft Parameters
-            col_w, col_f = st.columns(2)
-            with col_w:
-                win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m² (Material: C.S. + Galv.)")
-            with col_f:
-                fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
+            st.markdown("#### 🌧️ Prilling Cooling & Moisture Predictor")
+            st.caption("Estimates Moisture deviation based on real-time ambient weather, Aerodynamic Draft, and Melt Temp.")
             
             temp, hum = get_daudkhel_weather()
             
@@ -435,23 +465,28 @@ elif not df.empty:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Empirical Moisture Estimator
+                # Empirical Moisture Estimator Base
                 base_moist = 0.25
-                temp_penalty = max(0, (temp - 25) * 0.002)
-                hum_penalty = max(0, (hum - 40) * 0.0015)
+                
+                # Weather & Load Penalties
+                weather_penalty = max(0, (temp - 25) * 0.002) + max(0, (hum - 40) * 0.0015)
                 load_penalty = max(0, (get_val(daily_data, 'Load') - 100) * 0.001)
                 
-                # Aerodynamic Draft Penalties (Dust recovery limits draft, requiring more fan/vane opening)
+                # Aerodynamic Draft Penalties
                 draft_penalty = max(0, (100 - fan_open) * 0.0005) + max(0, (100 - win_open) * 0.0008)
                 
-                est_moisture = base_moist + temp_penalty + hum_penalty + load_penalty + draft_penalty
+                # Thermodynamic Penalties (Hotter melt requires more cooling; poor vacuum leaves more initial water)
+                thermal_penalty = max(0, (melt_temp - 138.0) * 0.003)
+                vacuum_penalty = max(0, (vac_abs - 30.0) * 0.0015)
+                
+                est_moisture = base_moist + weather_penalty + load_penalty + draft_penalty + thermal_penalty + vacuum_penalty
                 
                 if est_moisture > 0.3:
-                    st.error(f"⚠️ **Warning:** Insufficient cooling draft for current weather. Estimated product moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Consider increasing Fan or Vane opening.")
+                    st.error(f"⚠️ **Warning:** Insufficient cooling for current thermodynamics. Estimated moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Increase Draft Fan or reduce Melt Temp.")
                 elif est_moisture > 0.28:
-                    st.warning(f"⚡ **Alert:** Cooling efficiency is dropping. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
+                    st.warning(f"⚡ **Alert:** Cooling margin is shrinking. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
                 else:
-                    st.success(f"✅ **Optimal:** Favorable draft and ambient conditions. Estimated moisture: **{est_moisture:.3f}%**.")
+                    st.success(f"✅ **Optimal:** Excellent draft and thermal conditions. Estimated moisture: **{est_moisture:.3f}%**.")
             else:
                 st.error("Failed to connect to weather API. Please check server outbound rules.")
 
