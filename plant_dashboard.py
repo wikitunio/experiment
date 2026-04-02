@@ -7,11 +7,12 @@ from datetime import timedelta
 import datetime
 import requests
 import io
+import numpy as np
 
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
-# -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
+# -- THE SPEED FIX: LOAD IMAGE VIA URL --
 github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
@@ -131,9 +132,19 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
+    # --- FEATURE 1: Thermodynamic Equilibrium Model ---
+    def calc_theo_conv(row):
+        if row['Rx_NC'] == 0 or row['Rx_HC'] == 0: return 0.0
+        # Empirical conversion estimator based on standard Stamicarbon limits
+        return 62.0 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 1.29) * 6.0
+    
+    df_daily['Theo_CO2_Conv'] = df_daily.apply(calc_theo_conv, axis=1).clip(50, 75)
+    
     for col in ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
+            
+    df_daily['Eq_Gap'] = df_daily.apply(lambda r: r['Theo_CO2_Conv'] - r['CO2_Conv'] if r['CO2_Conv'] > 0 else 0, axis=1)
             
     return df_daily.sort_values('Date'), ""
 
@@ -145,7 +156,6 @@ elif not df.empty:
     yesterday = datetime.date.today() - timedelta(days=1)
     
     c_title, c_date = st.columns([6, 1])
-    
     with c_date:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         selected_date = st.date_input("Shift Date", yesterday, label_visibility="collapsed")
@@ -162,12 +172,9 @@ elif not df.empty:
     if not daily_data.empty:
         def get_val(data, col): return float(data[col].values[0]) if not data.empty and col in data.columns else 0.0
         
-        # --- THE FIX: SMART DELTA ---
-        # If yesterday's value was 0, it means missing data. This prevents massive fake spikes.
         def get_delta_val(col):
             y_val = get_val(yesterday_data, col)
-            if yesterday_data.empty or y_val == 0:
-                return None
+            if yesterday_data.empty or y_val == 0: return None
             return get_val(daily_data, col) - y_val
 
         remarks = daily_data['Remarks'].values[0]
@@ -175,7 +182,6 @@ elif not df.empty:
             st.info(f"📝 **Shift Log:** {remarks}")
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        # Safely handle the metric formatting if Smart Delta returns None
         d_prod = get_delta_val('Production')
         c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{d_prod:.0f} MT" if d_prod is not None else None)
         
@@ -194,11 +200,9 @@ elif not df.empty:
         def html_val(col, decimals=2, is_pct=False):
             val = get_val(daily_data, col)
             delta = get_delta_val(col)
-            
             val_str = f"{val:.{decimals}f}"
             if is_pct: val_str += "%"
             
-            # If the Smart Delta returned None (because yesterday was 0), show a neutral dash
             if delta is None or round(delta, decimals) == 0:
                 return f"<b>{val_str} <span class='delta-badge' style='background:#f3f4f6; color:#9ca3af;'>-</span></b>"
                 
@@ -206,10 +210,8 @@ elif not df.empty:
             d_str = f"{abs(delta_val):.{decimals}f}"
             if is_pct: d_str += "%"
             
-            if delta_val > 0:
-                return f"<b>{val_str} <span class='delta-badge' style='background:#dcfce7; color:#16a34a;'>▲ {d_str}</span></b>"
-            else:
-                return f"<b>{val_str} <span class='delta-badge' style='background:#fee2e2; color:#dc2626;'>▼ {d_str}</span></b>"
+            if delta_val > 0: return f"<b>{val_str} <span class='delta-badge' style='background:#dcfce7; color:#16a34a;'>▲ {d_str}</span></b>"
+            else: return f"<b>{val_str} <span class='delta-badge' style='background:#fee2e2; color:#dc2626;'>▼ {d_str}</span></b>"
 
         st.markdown("<h3 class='section-header'>🧪 Synthesis Loop & Major Vessels</h3>", unsafe_allow_html=True)
         v1, v2, v3, v4, v5 = st.columns(5)
@@ -220,8 +222,8 @@ elif not df.empty:
                 <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
                 <div class="v-row"><span>H/C</span>{html_val('Rx_HC', 2)}</div>
                 <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
-                <div class="v-row"><span>NH3 Conv (37%)</span>{html_val('NH3_Conv', 1, True)}</div>
-                <div class="v-row"><span>Urea Conc(32.74%)</span>{html_val('Urea_Conc', 2, True)}</div>
+                <div class="v-row"><span style="color:#059669; font-weight:bold;">Eq Gap (Theo: {get_val(daily_data, 'Theo_CO2_Conv'):.1f}%)</span>{html_val('Eq_Gap', 1, True)}</div>
+                <div class="v-row"><span>Urea Conc (32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v2:
@@ -256,8 +258,62 @@ elif not df.empty:
             </div>
             """, unsafe_allow_html=True)
 
-        # --- SECTION 3: TRENDS ---
-        st.markdown("<h3 class='section-header'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
+        # --- SECTION 3: AI & PREDICTIVE ANALYTICS ---
+        st.markdown("<h3 class='section-header' style='margin-top: 35px;'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
+        c_ai1, c_ai2 = st.columns([1, 1])
+        
+        with c_ai1:
+            st.markdown("#### 📝 AI Shift Handover Report")
+            st.caption("Click below to automatically generate a formatted handover log based on today's plant dynamics.")
+            if st.button("Generate Handover Log", use_container_width=True):
+                prod = get_val(daily_data, 'Production')
+                load = get_val(daily_data, 'Load')
+                co2 = get_val(daily_data, 'CO2_Conv')
+                st_eff = get_val(daily_data, 'Stripper_Eff')
+                gap = get_val(daily_data, 'Eq_Gap')
+                biuret = get_val(daily_data, 'Biuret')
+                
+                gap_text = "Optimal" if gap < 2.0 else "Sub-optimal (Check reactor internals/mixing)"
+                st_text = "Stable" if st_eff >= 77.0 else "Low (Monitor passivation and load)"
+                
+                report = f"SHIFT HANDOVER - {selected_date.strftime('%d %b %Y')}\n"
+                report += f"-----------------------------------------\n"
+                report += f"🏭 PRODUCTION: {prod:,.0f} MT | Load: {load:.1f}%\n"
+                report += f"⚗️ SYNTHESIS: CO2 Conv {co2:.1f}%. Equilibrium Gap is {gap:.1f}% ({gap_text}). Rx N/C: {get_val(daily_data, 'Rx_NC'):.2f}.\n"
+                report += f"🌪️ RECOVERY: Stripper Eff {st_eff:.1f}% ({st_text}). HPD Eff: {get_val(daily_data, 'HPD_Eff'):.1f}%.\n"
+                report += f"🔬 QUALITY: Biuret {biuret:.2f}%, Moisture {get_val(daily_data, 'Moisture'):.3f}%, APS {get_val(daily_data, 'APS'):.2f} mm.\n"
+                report += f"📝 REMARKS: {remarks if str(remarks) != 'nan' else 'None'}\n"
+                
+                st.text_area("Copy to clipboard:", value=report, height=200, label_visibility="collapsed")
+                
+        with c_ai2:
+            st.markdown("#### 🎯 Biuret Predictor (Quality vs Load)")
+            st.caption("Linear regression mapping Plant Load directly against product Biuret formation.")
+            
+            # Use safe numpy math for regression
+            df_clean = df[(df['Load'] > 0) & (df['Biuret'] > 0)].dropna(subset=['Load', 'Biuret'])
+            
+            if len(df_clean) > 2:
+                z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
+                p = np.poly1d(z)
+                
+                fig_pred = go.Figure()
+                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Actual Data', marker=dict(size=8, color='#1E3A8A', opacity=0.6)))
+                
+                x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
+                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trendline', line=dict(color='red', dash='dash')))
+                
+                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=False)
+                st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
+                
+                slope = z[0]
+                insight = "increases" if slope > 0 else "decreases"
+                st.info(f"💡 **Insight:** Historically, for every **1% increase** in Plant Load, Biuret **{insight} by {abs(slope):.4f}%**.")
+            else:
+                st.warning("Not enough valid historical data to generate prediction.")
+
+        # --- SECTION 4: TRENDS ---
+        st.markdown("<h3 class='section-header' style='margin-top: 35px;'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
         
         trend_days = st.slider("Quick Lookback Window (Days)", min_value=3, max_value=30, value=7, step=1)
         trend_start = selected_date_dt - timedelta(days=trend_days - 1)
@@ -311,7 +367,7 @@ elif not df.empty:
             f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
             st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
 
-        # --- SECTION 4: CUSTOM TREND BUILDER & EXPORT ---
+        # --- SECTION 5: CUSTOM TREND BUILDER & EXPORT ---
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🛠️ Custom Trend & Data Export</h3>", unsafe_allow_html=True)
         st.caption("Select a custom time period and variables to plot them together and view their summary statistics.")
