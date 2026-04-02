@@ -7,17 +7,13 @@ from datetime import timedelta
 import datetime
 import requests
 import io
-import base64
-import os
 
 # -- PAGE CONFIGURATION --
-st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
+# Sidebar is now set to collapsed by default to give you a full-screen app!
+st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 # -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
-# Replace YOUR_GITHUB_USERNAME with your actual GitHub username (e.g., Ahmed-Waqar-Tunio)
-# Make sure your repo name is exactly urea-dashboard
 github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
-
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
 # -- ULTRA-COMPACT CUSTOM CSS --
@@ -48,22 +44,34 @@ st.markdown(f"""
 st.markdown("""
     <div class="hero-container">
         <h1>🏭 UREA Plant Daily Operations</h1>
-        <p>AgriTech Limited | Iskandarabad, Daudkhel</p>
+        <p>AGL (AgriTech Limited) | Iskandarabad, Daudkhel</p>
     </div>
     """, unsafe_allow_html=True)
 
 @st.cache_data(ttl=300)
+
 def load_data():
+
     # THE FIX FOR 503 ERROR: Use a "User-Agent" header to look like a real browser
+
     url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1"
+
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
     
+
     try:
+
         response = requests.get(url, headers=headers)
+
         response.raise_for_status() # Check for HTTP errors
+
         excel_data = io.BytesIO(response.content)
+
     except Exception as e:
+
         return pd.DataFrame(), f"Cloud Connection Error: {e}. Please check if the OneDrive link is still active."
+
 
     try:
         xls = pd.ExcelFile(excel_data)
@@ -135,11 +143,20 @@ df, err_msg = load_data()
 if err_msg:
     st.error(f"⚠️ {err_msg}")
 elif not df.empty:
-    st.sidebar.header("📅 Dashboard Controls")
     yesterday = datetime.date.today() - timedelta(days=1)
-    selected_date = st.sidebar.date_input("Select Shift Date", yesterday)
-    selected_date_dt = pd.to_datetime(selected_date)
     
+    # --- THE FIX: INLINE DATE PICKER INSTEAD OF SIDEBAR ---
+    c_title, c_date = st.columns([5, 1])
+    with c_title:
+        st.markdown("<h3 style='color: #1E3A8A; margin-top: 15px; font-weight: 700; font-size: 20px; margin-bottom: 0;'>📊 Production & Quality</h3>", unsafe_allow_html=True)
+    with c_date:
+        st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True) # Aligns the box perfectly
+        selected_date = st.date_input("Shift Date", yesterday, label_visibility="collapsed")
+    
+    # Unified border that visually connects the Title and the Date Picker
+    st.markdown("<div style='border-bottom: 2px solid #1E3A8A; margin-top: 5px; margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    
+    selected_date_dt = pd.to_datetime(selected_date)
     daily_data = df[df['Date'] == selected_date_dt]
     yesterday_data = df[df['Date'] == (selected_date_dt - timedelta(days=1))]
     
@@ -151,7 +168,6 @@ elif not df.empty:
         if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log:** {remarks}")
 
-        st.markdown(f"<h3 class='section-header'>📊 Production & Quality ({selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{get_delta('Production'):.0f} MT")
         c2.metric("Plant Load", f"{get_val(daily_data, 'Load'):.1f} %", f"{get_delta('Load'):.1f} %")
@@ -159,7 +175,6 @@ elif not df.empty:
         c4.metric("Biuret", f"{get_val(daily_data, 'Biuret'):.2f} %", f"{get_delta('Biuret'):.2f} %", delta_color="inverse")
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{get_delta('APS'):.2f} mm")
 
-        # --- THE FIX: Custom Function to Generate HTML Deltas for Vessels ---
         def html_val(col, decimals=2, is_pct=False):
             val = get_val(daily_data, col)
             delta = get_delta(col)
@@ -330,7 +345,7 @@ elif not df.empty:
                     st.download_button(
                         label="📥 Download Custom CSV",
                         data=csv,
-                        file_name=f"AgriTech_Custom_Data_{c_start}_to_{c_end}.csv",
+                        file_name=f"AGL_Custom_Data_{c_start}_to_{c_end}.csv",
                         mime="text/csv",
                         use_container_width=True
                     )
