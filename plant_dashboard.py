@@ -12,7 +12,7 @@ import numpy as np
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
-# -- THE SPEED FIX: LOAD IMAGE VIA URL --
+# -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
 github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
@@ -47,6 +47,19 @@ st.markdown("""
         <p>AGL (AgriTech Limited) | Iskandarabad, Daudkhel</p>
     </div>
     """, unsafe_allow_html=True)
+
+# --- DAUDKHEL WEATHER API FETCH (CACHED FOR 15 MINS) ---
+@st.cache_data(ttl=900)
+def get_daudkhel_weather():
+    # Free unauthenticated API fetching current temp and humidity for Daudkhel coordinates
+    url = "https://api.open-meteo.com/v1/forecast?latitude=32.88&longitude=71.54&current=temperature_2m,relative_humidity_2m"
+    try:
+        r = requests.get(url, timeout=5).json()
+        temp = r['current']['temperature_2m']
+        hum = r['current']['relative_humidity_2m']
+        return temp, hum
+    except:
+        return None, None
 
 @st.cache_data(ttl=300)
 
@@ -132,10 +145,9 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # --- FEATURE 1: Thermodynamic Equilibrium Model ---
+    # Equilibrium Model
     def calc_theo_conv(row):
         if row['Rx_NC'] == 0 or row['Rx_HC'] == 0: return 0.0
-        # Empirical conversion estimator based on standard Stamicarbon limits
         return 62.0 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 1.29) * 6.0
     
     df_daily['Theo_CO2_Conv'] = df_daily.apply(calc_theo_conv, axis=1).clip(50, 75)
@@ -258,61 +270,7 @@ elif not df.empty:
             </div>
             """, unsafe_allow_html=True)
 
-        # --- SECTION 3: AI & PREDICTIVE ANALYTICS ---
-        st.markdown("<h3 class='section-header' style='margin-top: 35px;'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
-        c_ai1, c_ai2 = st.columns([1, 1])
-        
-        with c_ai1:
-            st.markdown("#### 📝 AI Shift Handover Report")
-            st.caption("Click below to automatically generate a formatted handover log based on today's plant dynamics.")
-            if st.button("Generate Handover Log", use_container_width=True):
-                prod = get_val(daily_data, 'Production')
-                load = get_val(daily_data, 'Load')
-                co2 = get_val(daily_data, 'CO2_Conv')
-                st_eff = get_val(daily_data, 'Stripper_Eff')
-                gap = get_val(daily_data, 'Eq_Gap')
-                biuret = get_val(daily_data, 'Biuret')
-                
-                gap_text = "Optimal" if gap < 2.0 else "Sub-optimal (Check reactor internals/mixing)"
-                st_text = "Stable" if st_eff >= 77.0 else "Low (Monitor passivation and load)"
-                
-                report = f"SHIFT HANDOVER - {selected_date.strftime('%d %b %Y')}\n"
-                report += f"-----------------------------------------\n"
-                report += f"🏭 PRODUCTION: {prod:,.0f} MT | Load: {load:.1f}%\n"
-                report += f"⚗️ SYNTHESIS: CO2 Conv {co2:.1f}%. Equilibrium Gap is {gap:.1f}% ({gap_text}). Rx N/C: {get_val(daily_data, 'Rx_NC'):.2f}.\n"
-                report += f"🌪️ RECOVERY: Stripper Eff {st_eff:.1f}% ({st_text}). HPD Eff: {get_val(daily_data, 'HPD_Eff'):.1f}%.\n"
-                report += f"🔬 QUALITY: Biuret {biuret:.2f}%, Moisture {get_val(daily_data, 'Moisture'):.3f}%, APS {get_val(daily_data, 'APS'):.2f} mm.\n"
-                report += f"📝 REMARKS: {remarks if str(remarks) != 'nan' else 'None'}\n"
-                
-                st.text_area("Copy to clipboard:", value=report, height=200, label_visibility="collapsed")
-                
-        with c_ai2:
-            st.markdown("#### 🎯 Biuret Predictor (Quality vs Load)")
-            st.caption("Linear regression mapping Plant Load directly against product Biuret formation.")
-            
-            # Use safe numpy math for regression
-            df_clean = df[(df['Load'] > 0) & (df['Biuret'] > 0)].dropna(subset=['Load', 'Biuret'])
-            
-            if len(df_clean) > 2:
-                z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
-                p = np.poly1d(z)
-                
-                fig_pred = go.Figure()
-                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Actual Data', marker=dict(size=8, color='#1E3A8A', opacity=0.6)))
-                
-                x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
-                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trendline', line=dict(color='red', dash='dash')))
-                
-                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=False)
-                st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
-                
-                slope = z[0]
-                insight = "increases" if slope > 0 else "decreases"
-                st.info(f"💡 **Insight:** Historically, for every **1% increase** in Plant Load, Biuret **{insight} by {abs(slope):.4f}%**.")
-            else:
-                st.warning("Not enough valid historical data to generate prediction.")
-
-        # --- SECTION 4: TRENDS ---
+        # --- SECTION 3: TRENDS ---
         st.markdown("<h3 class='section-header' style='margin-top: 35px;'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
         
         trend_days = st.slider("Quick Lookback Window (Days)", min_value=3, max_value=30, value=7, step=1)
@@ -367,7 +325,7 @@ elif not df.empty:
             f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
             st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
 
-        # --- SECTION 5: CUSTOM TREND BUILDER & EXPORT ---
+        # --- SECTION 4: CUSTOM TREND BUILDER & EXPORT ---
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🛠️ Custom Trend & Data Export</h3>", unsafe_allow_html=True)
         st.caption("Select a custom time period and variables to plot them together and view their summary statistics.")
@@ -426,6 +384,67 @@ elif not df.empty:
                 st.warning("No data found for this custom date range.")
         elif len(custom_dates) < 2:
             st.info("Please select an End Date for the custom time period.")
+
+        # --- SECTION 5: AI & PREDICTIVE ANALYTICS (MOVED TO BOTTOM) ---
+        st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
+        st.markdown("<h3 class='section-header'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
+        c_ai1, c_ai2 = st.columns([1, 1])
+        
+        with c_ai1:
+            st.markdown("#### 🎯 Biuret Predictor (Quality vs Load)")
+            st.caption("Linear regression mapping Plant Load directly against product Biuret formation.")
+            
+            df_clean = df[(df['Load'] > 0) & (df['Biuret'] > 0)].dropna(subset=['Load', 'Biuret'])
+            
+            if len(df_clean) > 2:
+                z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
+                p = np.poly1d(z)
+                
+                fig_pred = go.Figure()
+                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Actual Data', marker=dict(size=8, color='#1E3A8A', opacity=0.6)))
+                
+                x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
+                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Trendline', line=dict(color='red', dash='dash')))
+                
+                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=False)
+                st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
+                
+                slope = z[0]
+                insight = "increases" if slope > 0 else "decreases"
+                st.info(f"💡 **Insight:** Historically, for every **1% increase** in Plant Load, Biuret **{insight} by {abs(slope):.4f}%**.")
+            else:
+                st.warning("Not enough valid historical data to generate prediction.")
+                
+        with c_ai2:
+            st.markdown("#### 🌧️ Prilling Tower Cooling Predictor (U-1A301)")
+            st.caption("Estimates Moisture deviation based on real-time ambient weather sucked into the louvers.")
+            
+            temp, hum = get_daudkhel_weather()
+            
+            if temp is not None and hum is not None:
+                st.markdown(f"""
+                <div style='background:#f0f9ff; padding:15px; border-radius:8px; border-left:4px solid #0284c7; margin-bottom:15px;'>
+                    <b>Live Daudkhel Weather:</b><br>
+                    🌡️ Temperature: <b>{temp}°C</b> &nbsp; | &nbsp; 💧 Humidity: <b>{hum}%</b>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Empirical Moisture Estimator (Base 0.25% + temp penalty + humidity penalty)
+                base_moist = 0.25
+                temp_penalty = max(0, (temp - 25) * 0.002)
+                hum_penalty = max(0, (hum - 40) * 0.0015)
+                load_penalty = max(0, (get_val(daily_data, 'Load') - 100) * 0.001)
+                
+                est_moisture = base_moist + temp_penalty + hum_penalty + load_penalty
+                
+                if est_moisture > 0.3:
+                    st.error(f"⚠️ **Warning:** Current ambient conditions severely reduce U-1A301 cooling draft. Estimated product moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Monitor Scraper and Belt Scale.")
+                elif est_moisture > 0.28:
+                    st.warning(f"⚡ **Alert:** Cooling efficiency is dropping. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
+                else:
+                    st.success(f"✅ **Optimal:** Ambient conditions are favorable for natural draft cooling. Estimated moisture: **{est_moisture:.3f}%**.")
+            else:
+                st.error("Failed to connect to weather API. Please check server outbound rules.")
 
     else:
         st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
