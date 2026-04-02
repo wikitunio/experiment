@@ -12,7 +12,7 @@ import numpy as np
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
-# -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
+# -- THE SPEED FIX: LOAD IMAGE VIA URL --
 github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
@@ -122,7 +122,7 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
-    # 3. Lab Analysis (Added HPA and LPA columns S, T, W, X)
+    # 3. Lab Analysis 
     try:
         try: df_lab_raw = pd.read_excel(xls, sheet_name="Lab Analysis", skiprows=1)
         except: df_lab_raw = pd.read_excel(xls, sheet_name="Lab analysis", skiprows=1)
@@ -132,12 +132,10 @@ def load_data():
         df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) 
         df_lab['Stripper_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 6], errors='coerce').fillna(0) 
         df_lab['Stripper_Urea'] = pd.to_numeric(df_lab_raw.iloc[:, 8], errors='coerce').fillna(0) 
-        
-        # New Extractions for VMG Predictor
-        df_lab['HPA_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 18], errors='coerce').fillna(0) # Col S
-        df_lab['HPA_CO2'] = pd.to_numeric(df_lab_raw.iloc[:, 19], errors='coerce').fillna(0) # Col T
-        df_lab['LPA_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 22], errors='coerce').fillna(0) # Col W
-        df_lab['LPA_CO2'] = pd.to_numeric(df_lab_raw.iloc[:, 23], errors='coerce').fillna(0) # Col X
+        df_lab['HPA_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 18], errors='coerce').fillna(0) 
+        df_lab['HPA_CO2'] = pd.to_numeric(df_lab_raw.iloc[:, 19], errors='coerce').fillna(0) 
+        df_lab['LPA_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 22], errors='coerce').fillna(0) 
+        df_lab['LPA_CO2'] = pd.to_numeric(df_lab_raw.iloc[:, 23], errors='coerce').fillna(0) 
         
         df_lab = df_lab.dropna(subset=['Date'])
     except Exception as e:
@@ -175,13 +173,13 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
+    # --- MATH FIX: Corrected H/C baseline to Reactor Design (0.52) ---
     def calc_theo_conv(row):
         if row['Rx_NC'] == 0 or row['Rx_HC'] == 0: return 0.0
-        return 62.0 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 1.29) * 6.0
+        return 62.5 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 0.52) * 6.0
     
     df_daily['Theo_CO2_Conv'] = df_daily.apply(calc_theo_conv, axis=1).clip(50, 75)
     
-    # Auto convert decimals to percentages if stored as 0.xx in excel
     pct_cols = ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc', 'Stripper_NH3', 'Stripper_Urea', 'HPA_NH3', 'HPA_CO2', 'LPA_NH3', 'LPA_CO2']
     for col in pct_cols:
         if col in df_daily.columns:
@@ -268,7 +266,7 @@ elif not df.empty:
                 <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
                 <div class="v-row"><span>H/C (Ref: 0.52)</span>{html_val('Rx_HC', 2)}</div>
                 <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
-                <div class="v-row"><span style="color:#059669; font-weight:bold;">Eq Gap</span>{html_val('Eq_Gap', 1, True)}</div>
+                <div class="v-row"><span style="color:#059669; font-weight:bold;">Equilibrium Gap (Ref: &lt; 3.0%)</span>{html_val('Eq_Gap', 1, True)}</div>
                 <div class="v-row"><span>Urea Conc(32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -496,90 +494,4 @@ elif not df.empty:
                 est_moisture = base_moist + weather_penalty + load_penalty + draft_penalty + thermal_penalty + vacuum_penalty
                 
                 if est_moisture > 0.3: st.error(f"⚠️ **Warning:** Insufficient cooling for current thermodynamics. Estimated moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Increase Draft Fan or reduce Melt Temp.")
-                elif est_moisture > 0.28: st.warning(f"⚡ **Alert:** Cooling margin is shrinking. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
-                else: st.success(f"✅ **Optimal:** Excellent draft and thermal conditions. Estimated moisture: **{est_moisture:.3f}%**.")
-            else:
-                st.error("Failed to connect to weather API. Please check server outbound rules.")
-
-        # --- FEATURE: VMG UREA INSPIRED CARBAMATE CRYSTALLIZATION PREDICTOR ---
-        st.markdown("<hr style='border:1px dashed #e2e8f0; margin: 30px 0;'>", unsafe_allow_html=True)
-        st.markdown("#### ❄️ HP Carbamate Crystallization Predictor (VMG-Inspired)")
-        st.caption("Calculate the safe operating temperature for Carbamate pumps. Switch tabs to load today's actual Lab Analysis data or use the Custom Calculator.")
-        
-        # Re-usable renderer for the VMG calculations
-        def render_vmg_tab(default_nh3, default_co2, default_h2o, key_prefix):
-            c_carb1, c_carb2 = st.columns([1, 2])
-            with c_carb1:
-                carb_nh3 = st.number_input("NH3 (wt%)", value=float(default_nh3), step=0.5, key=f"{key_prefix}_nh3")
-                carb_co2 = st.number_input("CO2 (wt%)", value=float(default_co2), step=0.5, key=f"{key_prefix}_co2")
-                carb_h2o = st.number_input("H2O + Urea (wt%)", value=float(default_h2o), step=0.5, key=f"{key_prefix}_h2o", help="Balance mostly consists of Water with trace solvent Urea.")
-                
-            total_wt = carb_nh3 + carb_co2 + carb_h2o
-            if total_wt == 0: total_wt = 1 # Prevent Div by Zero
-            
-            n_nh3 = (carb_nh3 / total_wt) * 100
-            n_co2 = (carb_co2 / total_wt) * 100
-            n_h2o = (carb_h2o / total_wt) * 100
-            
-            nc_ratio = (n_nh3 / 17.031) / (n_co2 / 44.01) if n_co2 > 0 else 0
-            cryst_temp = 105.0 + (20.0 - n_h2o) * 2.8 + abs(nc_ratio - 2.3)**2 * 15.0
-                
-            with c_carb2:
-                st.markdown(f"""
-                <div style='background:linear-gradient(135deg, #f0f9ff, #e0f2fe); padding:20px; border-radius:8px; border-left:4px solid #0284c7; height: 100%; display: flex; flex-direction: column; justify-content: center;'>
-                    <div style='display: flex; justify-content: space-between; margin-bottom: 10px;'>
-                        <span style='color: #475569; font-size: 14px;'>Normalized Composition:</span>
-                        <b style='color: #0f172a;'>NH₃: {n_nh3:.1f}% | CO₂: {n_co2:.1f}% | Balance: {n_h2o:.1f}%</b>
-                    </div>
-                    <div style='display: flex; justify-content: space-between; margin-bottom: 10px;'>
-                        <span style='color: #475569; font-size: 14px;'>Molar N/C Ratio:</span>
-                        <b style='color: #0f172a;'>{nc_ratio:.2f}</b>
-                    </div>
-                    <div style='display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #cbd5e1; padding-top: 10px;'>
-                        <span style='color: #0369a1; font-size: 18px; font-weight: bold;'>Predicted Crystallization Temp:</span>
-                        <span style='color: #be123c; font-size: 24px; font-weight: bold;'>{cryst_temp:.1f} °C</span>
-                    </div>
-                    <p style='font-size: 12px; color: #64748b; margin-top: 10px; margin-bottom: 0;'>
-                        <i>*If the HP Carbamate Pump operating temperature drops below <b>{cryst_temp:.1f} °C</b>, rapid solidification will occur causing severe pump damage. Decreasing water improves conversion efficiency but raises this risk limit.</i>
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        tab_hpa, tab_lpa, tab_custom = st.tabs(["🧪 HPA Profile (Lab Data)", "🧪 LPA Profile (Lab Data)", "🎛️ Custom Calculator"])
-        
-        with tab_hpa:
-            hpa_nh3 = get_val(daily_data, 'HPA_NH3')
-            hpa_co2 = get_val(daily_data, 'HPA_CO2')
-            if hpa_nh3 > 0 and hpa_co2 > 0:
-                hpa_h2o = max(0.0, 100.0 - hpa_nh3 - hpa_co2)
-                st.info(f"Loaded actual HPA lab analysis for {selected_date.strftime('%d %b %Y')}. You can adjust these values to see what happens.")
-                render_vmg_tab(hpa_nh3, hpa_co2, hpa_h2o, "hpa")
-            else:
-                st.warning(f"No HPA Lab Data recorded for {selected_date.strftime('%d %b %Y')}. Showing default values.")
-                render_vmg_tab(42.0, 38.0, 20.0, "hpa_default")
-
-        with tab_lpa:
-            lpa_nh3 = get_val(daily_data, 'LPA_NH3')
-            lpa_co2 = get_val(daily_data, 'LPA_CO2')
-            if lpa_nh3 > 0 and lpa_co2 > 0:
-                lpa_h2o = max(0.0, 100.0 - lpa_nh3 - lpa_co2)
-                st.info(f"Loaded actual LPA lab analysis for {selected_date.strftime('%d %b %Y')}. You can adjust these values to see what happens.")
-                render_vmg_tab(lpa_nh3, lpa_co2, lpa_h2o, "lpa")
-            else:
-                st.warning(f"No LPA Lab Data recorded for {selected_date.strftime('%d %b %Y')}. Showing default values.")
-                render_vmg_tab(38.0, 36.0, 26.0, "lpa_default")
-                
-        with tab_custom:
-            st.info("Independent theoretical calculator.")
-            render_vmg_tab(42.0, 38.0, 20.0, "custom")
-
-    else:
-        st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
-
-# -- FOOTER SECTION --
-st.markdown(f"""
-    <div class="footer">
-        Developed by <a href="https://www.linkedin.com/in/wikitunio" target="_blank">Waqar Ahmed Tunio</a> with Ai<br>
-        Email: <a href="mailto:ahmed.waqar@pafl.com.pk">ahmed.waqar@pafl.com.pk</a>
-    </div>
-    """, unsafe_allow_html=True)
+                elif est_moisture > 0.28: st.warning(f"
