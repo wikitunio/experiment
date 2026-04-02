@@ -49,15 +49,13 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# --- DAUDKHEL WEATHER API FETCH (CACHED FOR 15 MINS) ---
+# --- DAUDKHEL WEATHER API FETCH ---
 @st.cache_data(ttl=900)
 def get_daudkhel_weather():
     url = "https://api.open-meteo.com/v1/forecast?latitude=32.88&longitude=71.54&current=temperature_2m,relative_humidity_2m"
     try:
         r = requests.get(url, timeout=5).json()
-        temp = r['current']['temperature_2m']
-        hum = r['current']['relative_humidity_2m']
-        return temp, hum
+        return r['current']['temperature_2m'], r['current']['relative_humidity_2m']
     except:
         return None, None
 
@@ -91,6 +89,7 @@ def load_data():
     except Exception as e:
         return pd.DataFrame(), f"Error reading Excel structure: {e}"
 
+    # 1. PQ Trends Sheet
     try:
         df_pq_raw = pd.read_excel(xls, sheet_name="PQ Trends", skiprows=1)
         df_pq = pd.DataFrame()
@@ -104,6 +103,7 @@ def load_data():
         df_pq = df_pq.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check PQ Trends Sheet Format"
 
+    # 2. Efficiencies Sheet
     try:
         df_eff_raw = pd.read_excel(xls, sheet_name="Efficiencies", skiprows=2)
         df_eff = pd.DataFrame()
@@ -122,26 +122,51 @@ def load_data():
         df_eff = df_eff.dropna(subset=['Date'])
     except: return pd.DataFrame(), "Check Efficiencies Sheet Format"
 
+    # 3. Lab Analysis Sheet (Added Stripper NH3 and Urea columns)
     try:
-        df_lab_raw = pd.read_excel(xls, sheet_name="Lab Analysis", skiprows=1)
+        try: df_lab_raw = pd.read_excel(xls, sheet_name="Lab Analysis", skiprows=1)
+        except: df_lab_raw = pd.read_excel(xls, sheet_name="Lab analysis", skiprows=1)
+        
         df_lab = pd.DataFrame()
         df_lab['Date'] = pd.to_datetime(df_lab_raw.iloc[:, 0], errors='coerce')
         df_lab['Urea_Conc'] = pd.to_numeric(df_lab_raw.iloc[:, 4], errors='coerce').fillna(0) 
+        df_lab['Stripper_NH3'] = pd.to_numeric(df_lab_raw.iloc[:, 6], errors='coerce').fillna(0) # Col G
+        df_lab['Stripper_Urea'] = pd.to_numeric(df_lab_raw.iloc[:, 8], errors='coerce').fillna(0) # Col I
         df_lab = df_lab.dropna(subset=['Date'])
     except Exception as e:
-        df_lab = pd.DataFrame(columns=['Date', 'Urea_Conc'])
+        df_lab = pd.DataFrame(columns=['Date', 'Urea_Conc', 'Stripper_NH3', 'Stripper_Urea'])
 
+    # 4. Product Analysis Sheet (Added Free Ammonia daily average)
+    try:
+        try: df_pa_raw = pd.read_excel(xls, sheet_name="Product Analysis", skiprows=1)
+        except: df_pa_raw = pd.read_excel(xls, sheet_name="Product analysis", skiprows=1)
+        
+        df_pa = pd.DataFrame()
+        df_pa['Date'] = pd.to_datetime(df_pa_raw.iloc[:, 0], errors='coerce').dt.floor('d')
+        df_pa['Free_Ammonia'] = pd.to_numeric(df_pa_raw.iloc[:, 6], errors='coerce') # Col G
+        df_pa = df_pa.dropna(subset=['Date'])
+        df_pa_daily = df_pa.groupby('Date').agg({'Free_Ammonia': 'mean'}).reset_index()
+    except Exception as e:
+        df_pa_daily = pd.DataFrame(columns=['Date', 'Free_Ammonia'])
+
+    # Merge Engine
     df_master = pd.merge(df_pq, df_eff, on='Date', how='left')
-    if not df_lab.empty:
-        df_master = pd.merge(df_master, df_lab, on='Date', how='left')
+    
+    if not df_lab.empty: df_master = pd.merge(df_master, df_lab, on='Date', how='left')
     else:
         df_master['Urea_Conc'] = 0.0
+        df_master['Stripper_NH3'] = 0.0
+        df_master['Stripper_Urea'] = 0.0
+
+    if not df_pa_daily.empty: df_master = pd.merge(df_master, df_pa_daily, on='Date', how='left')
+    else: df_master['Free_Ammonia'] = 0.0
 
     agg_funcs = {
         'Production': 'sum', 'Load': 'mean', 'Moisture': 'mean', 'Biuret': 'mean',
         'APS': 'mean', 'CO2_Conv': 'mean', 'NH3_Conv': 'mean', 'Rx_NC': 'mean', 'Rx_HC': 'mean',
         'Stripper_Eff': 'mean', 'Stripper_NC': 'mean', 'HPD_Eff': 'mean', 'HPA_NC': 'mean', 'HPA_HC': 'mean',
-        'LPA_NC': 'mean', 'LPA_HC': 'mean', 'Urea_Conc': 'mean', 'Remarks': 'first'
+        'LPA_NC': 'mean', 'LPA_HC': 'mean', 'Urea_Conc': 'mean', 'Stripper_NH3': 'mean', 'Stripper_Urea': 'mean',
+        'Free_Ammonia': 'mean', 'Remarks': 'first'
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
@@ -151,7 +176,7 @@ def load_data():
     
     df_daily['Theo_CO2_Conv'] = df_daily.apply(calc_theo_conv, axis=1).clip(50, 75)
     
-    for col in ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc']:
+    for col in ['CO2_Conv', 'NH3_Conv', 'Stripper_Eff', 'HPD_Eff', 'Urea_Conc', 'Stripper_NH3', 'Stripper_Urea']:
         if col in df_daily.columns:
             df_daily[col] = df_daily[col].apply(lambda x: x * 100 if 0 < x <= 1.5 else x)
             
@@ -192,7 +217,8 @@ elif not df.empty:
         if str(remarks) != 'nan' and str(remarks).strip() and str(remarks).strip() != '0':
             st.info(f"📝 **Shift Log:** {remarks}")
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        # The 6 Column Layout for the expanded KPIs!
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         d_prod = get_delta_val('Production')
         c1.metric("Production", f"{get_val(daily_data, 'Production'):,.0f} MT", f"{d_prod:.0f} MT" if d_prod is not None else None)
         
@@ -207,6 +233,9 @@ elif not df.empty:
         
         d_aps = get_delta_val('APS')
         c5.metric("APS", f"{get_val(daily_data, 'APS'):.2f} mm", f"{d_aps:.2f} mm" if d_aps is not None else None)
+        
+        d_fnh3 = get_delta_val('Free_Ammonia')
+        c6.metric("Free NH3", f"{get_val(daily_data, 'Free_Ammonia'):.1f} ppm", f"{d_fnh3:.1f} ppm" if d_fnh3 is not None else None, delta_color="inverse")
 
         def html_val(col, decimals=2, is_pct=False):
             val = get_val(daily_data, col)
@@ -231,10 +260,10 @@ elif not df.empty:
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
                 <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
-                <div class="v-row"><span>H/C</span>{html_val('Rx_HC', 2)}</div>
+                <div class="v-row"><span>H/C (Ref: 0.52)</span>{html_val('Rx_HC', 2)}</div>
                 <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
-                <div class="v-row"><span style="color:#059669; font-weight:bold;">Eq Gap (Theo: {get_val(daily_data, 'Theo_CO2_Conv'):.1f}%)</span>{html_val('Eq_Gap', 1, True)}</div>
-                <div class="v-row"><span>Urea Conc (32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
+                <div class="v-row"><span style="color:#059669; font-weight:bold;">Eq Gap</span>{html_val('Eq_Gap', 1, True)}</div>
+                <div class="v-row"><span>Urea Conc(32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v2:
@@ -243,6 +272,8 @@ elif not df.empty:
                 <div class="v-title v-title-st">🌪️ Stripper</div>
                 <div class="v-row"><span>Eff (Ref: 78%)</span>{html_val('Stripper_Eff', 1, True)}</div>
                 <div class="v-row"><span>Stripper N/C (2.01)</span>{html_val('Stripper_NC', 2)}</div>
+                <div class="v-row"><span>Ammonia</span>{html_val('Stripper_NH3', 2, True)}</div>
+                <div class="v-row"><span>Urea Conc</span>{html_val('Stripper_Urea', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v3:
@@ -388,7 +419,6 @@ elif not df.empty:
         st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
         st.markdown("<h3 class='section-header'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
         
-        # Master Control Panel for Thermodynamic Simulation
         st.markdown("""
         <div class="sim-panel">
             <h4 style="margin-top:0px; color:#334155;">🎛️ Real-Time Process Simulator</h4>
@@ -396,16 +426,11 @@ elif not df.empty:
         </div>
         """, unsafe_allow_html=True)
         
-        # 4-Column Layout for Inputs
         sim1, sim2, sim3, sim4 = st.columns(4)
-        with sim1:
-            win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m²")
-        with sim2:
-            fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
-        with sim3:
-            melt_temp = st.slider("Melt Temp (°C)", min_value=132.0, max_value=145.0, value=138.0, step=0.5, help="Temp of Urea melt going to Prilling Tower")
-        with sim4:
-            vac_abs = st.slider("Vacuum (mmHg Abs)", min_value=10.0, max_value=80.0, value=30.0, step=1.0, help="Absolute pressure of Final Concentrator")
+        with sim1: win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m²")
+        with sim2: fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
+        with sim3: melt_temp = st.slider("Melt Temp (°C)", min_value=132.0, max_value=145.0, value=138.0, step=0.5, help="Temp of Urea melt going to Prilling Tower")
+        with sim4: vac_abs = st.slider("Vacuum (mmHg Abs)", min_value=10.0, max_value=80.0, value=30.0, step=1.0, help="Absolute pressure of Final Concentrator")
 
         st.markdown("<br>", unsafe_allow_html=True)
         c_ai1, c_ai2 = st.columns([1, 1])
@@ -420,16 +445,10 @@ elif not df.empty:
                 z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
                 p = np.poly1d(z)
                 current_load = get_val(daily_data, 'Load')
-                
-                # Base historic prediction based on load
                 base_pred_biuret = p(current_load)
                 
-                # Thermodynamic Penalties
-                # 1. Higher temp = faster biuret reaction
                 temp_biuret_penalty = (melt_temp - 138.0) * 0.015 
-                # 2. Poorer vacuum (higher absolute pressure) = higher boiling point required = more biuret
                 vac_biuret_penalty = (vac_abs - 30.0) * 0.005
-                
                 simulated_biuret = base_pred_biuret + temp_biuret_penalty + vac_biuret_penalty
                 
                 fig_pred = go.Figure()
@@ -437,22 +456,18 @@ elif not df.empty:
                 
                 x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
                 fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Baseline Trend', line=dict(color='#94a3b8', dash='dash')))
-                
-                # Plot the actively simulated point
                 fig_pred.add_trace(go.Scatter(x=[current_load], y=[simulated_biuret], mode='markers', name='Simulated State', marker=dict(size=14, color='red', symbol='star')))
                 
                 fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
                 st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
                 
-                if simulated_biuret > 0.9:
-                    st.error(f"⚠️ **Warning:** Predicted Biuret is **{simulated_biuret:.2f}%**. To reduce it, try improving concentrator vacuum below {vac_abs} mmHg Abs or dropping melt temp.")
-                else:
-                    st.success(f"✅ **Safe Quality:** Predicted Biuret is **{simulated_biuret:.2f}%** (Well below 0.9% design limit).")
+                if simulated_biuret > 0.9: st.error(f"⚠️ **Warning:** Predicted Biuret is **{simulated_biuret:.2f}%**. To reduce it, try improving concentrator vacuum below {vac_abs} mmHg Abs or dropping melt temp.")
+                else: st.success(f"✅ **Safe Quality:** Predicted Biuret is **{simulated_biuret:.2f}%**.")
             else:
                 st.warning("Not enough valid historical data to generate prediction.")
                 
         with c_ai2:
-            st.markdown("#### 🌧️ Prilling Cooling & Moisture Predictor")
+            st.markdown("#### 🌧️ Prilling Cooling Predictor")
             st.caption("Estimates Moisture deviation based on real-time ambient weather, Aerodynamic Draft, and Melt Temp.")
             
             temp, hum = get_daudkhel_weather()
@@ -465,30 +480,65 @@ elif not df.empty:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Empirical Moisture Estimator Base
                 base_moist = 0.25
-                
-                # Weather & Load Penalties
                 weather_penalty = max(0, (temp - 25) * 0.002) + max(0, (hum - 40) * 0.0015)
                 load_penalty = max(0, (get_val(daily_data, 'Load') - 100) * 0.001)
-                
-                # Aerodynamic Draft Penalties
                 draft_penalty = max(0, (100 - fan_open) * 0.0005) + max(0, (100 - win_open) * 0.0008)
-                
-                # Thermodynamic Penalties (Hotter melt requires more cooling; poor vacuum leaves more initial water)
                 thermal_penalty = max(0, (melt_temp - 138.0) * 0.003)
                 vacuum_penalty = max(0, (vac_abs - 30.0) * 0.0015)
                 
                 est_moisture = base_moist + weather_penalty + load_penalty + draft_penalty + thermal_penalty + vacuum_penalty
                 
-                if est_moisture > 0.3:
-                    st.error(f"⚠️ **Warning:** Insufficient cooling for current thermodynamics. Estimated moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Increase Draft Fan or reduce Melt Temp.")
-                elif est_moisture > 0.28:
-                    st.warning(f"⚡ **Alert:** Cooling margin is shrinking. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
-                else:
-                    st.success(f"✅ **Optimal:** Excellent draft and thermal conditions. Estimated moisture: **{est_moisture:.3f}%**.")
+                if est_moisture > 0.3: st.error(f"⚠️ **Warning:** Insufficient cooling for current thermodynamics. Estimated moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Increase Draft Fan or reduce Melt Temp.")
+                elif est_moisture > 0.28: st.warning(f"⚡ **Alert:** Cooling margin is shrinking. Estimated moisture: **{est_moisture:.3f}%**. Monitor crystallization at EL+82500.")
+                else: st.success(f"✅ **Optimal:** Excellent draft and thermal conditions. Estimated moisture: **{est_moisture:.3f}%**.")
             else:
                 st.error("Failed to connect to weather API. Please check server outbound rules.")
+
+        # --- FEATURE: VMG UREA INSPIRED CARBAMATE CRYSTALLIZATION PREDICTOR ---
+        st.markdown("<hr style='border:1px dashed #e2e8f0; margin: 30px 0;'>", unsafe_allow_html=True)
+        st.markdown("#### ❄️ HP Carbamate Crystallization Predictor (VMG-Inspired)")
+        st.caption("Calculate the safe operating temperature for HP Carbamate pumps based on recycle solution composition to prevent 'salting out' (solidification).")
+        
+        c_carb1, c_carb2 = st.columns([1, 2])
+        
+        with c_carb1:
+            carb_nh3 = st.number_input("NH3 (wt%)", value=42.0, step=0.5, help="Ammonia weight percentage in recycle.")
+            carb_co2 = st.number_input("CO2 (wt%)", value=38.0, step=0.5, help="Carbon Dioxide weight percentage in recycle.")
+            carb_h2o = st.number_input("H2O (wt%)", value=20.0, step=0.5, help="Water weight percentage in recycle. Minimizing water improves plant conversion but raises crystallization temperature.")
+            
+            # Normalization logic to ensure 100% total for the formula
+            total_wt = carb_nh3 + carb_co2 + carb_h2o
+            n_nh3 = (carb_nh3 / total_wt) * 100
+            n_co2 = (carb_co2 / total_wt) * 100
+            n_h2o = (carb_h2o / total_wt) * 100
+            
+            # N/C Molar Ratio = (NH3 wt / Molecular Wt) / (CO2 wt / Molecular Wt)
+            nc_ratio = (n_nh3 / 17.031) / (n_co2 / 44.01)
+            
+            # Simplified Empirical Janecke phase interpolation
+            cryst_temp = 105.0 + (20.0 - n_h2o) * 2.8 + abs(nc_ratio - 2.3)**2 * 15.0
+            
+        with c_carb2:
+            st.markdown(f"""
+            <div style='background:linear-gradient(135deg, #f0f9ff, #e0f2fe); padding:20px; border-radius:8px; border-left:4px solid #0284c7; height: 100%; display: flex; flex-direction: column; justify-content: center;'>
+                <div style='display: flex; justify-content: space-between; margin-bottom: 10px;'>
+                    <span style='color: #475569; font-size: 14px;'>Normalized Composition:</span>
+                    <b style='color: #0f172a;'>NH₃: {n_nh3:.1f}% | CO₂: {n_co2:.1f}% | H₂O: {n_h2o:.1f}%</b>
+                </div>
+                <div style='display: flex; justify-content: space-between; margin-bottom: 10px;'>
+                    <span style='color: #475569; font-size: 14px;'>Molar N/C Ratio:</span>
+                    <b style='color: #0f172a;'>{nc_ratio:.2f}</b>
+                </div>
+                <div style='display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #cbd5e1; padding-top: 10px;'>
+                    <span style='color: #0369a1; font-size: 18px; font-weight: bold;'>Predicted Crystallization Temp:</span>
+                    <span style='color: #be123c; font-size: 24px; font-weight: bold;'>{cryst_temp:.1f} °C</span>
+                </div>
+                <p style='font-size: 12px; color: #64748b; margin-top: 10px; margin-bottom: 0;'>
+                    <i>*If the HP Carbamate Pump operating temperature drops below <b>{cryst_temp:.1f} °C</b>, rapid solidification will occur causing severe pump damage. Decreasing water improves conversion efficiency but raises this risk limit.</i>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
     else:
         st.info(f"No data found for {selected_date.strftime('%d %b %Y')}. Please select a date from the file history.")
