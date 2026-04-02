@@ -9,7 +9,6 @@ import requests
 import io
 
 # -- PAGE CONFIGURATION --
-# Sidebar is now set to collapsed by default to give you a full-screen app!
 st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 # -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
@@ -145,16 +144,20 @@ if err_msg:
 elif not df.empty:
     yesterday = datetime.date.today() - timedelta(days=1)
     
-    # --- THE FIX: INLINE DATE PICKER INSTEAD OF SIDEBAR ---
-    c_title, c_date = st.columns([5, 1])
-    with c_title:
-        st.markdown("<h3 style='color: #1E3A8A; margin-top: 15px; font-weight: 700; font-size: 20px; margin-bottom: 0;'>📊 Production & Quality</h3>", unsafe_allow_html=True)
-    with c_date:
-        st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True) # Aligns the box perfectly
-        selected_date = st.date_input("Shift Date", yesterday, label_visibility="collapsed")
+    # --- THE FIX: Title and Date Picker side-by-side with correct font ---
+    c_title, c_date = st.columns([6, 1]) # Column 6 is wider to fit the full title text
     
-    # Unified border that visually connects the Title and the Date Picker
-    st.markdown("<div style='border-bottom: 2px solid #1E3A8A; margin-top: 5px; margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    # We must read the date first so the title can use it!
+    with c_date:
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        selected_date = st.date_input("Shift Date", yesterday, label_visibility="collapsed")
+        
+    with c_title:
+        # Replicated the exact font size and color of .section-header
+        st.markdown(f"<h3 style='color: #1E3A8A; margin-top: 15px; margin-bottom: 0px; font-weight: 700; font-size: 20px;'>📊 Production & Quality ({selected_date.strftime('%d %b %Y')})</h3>", unsafe_allow_html=True)
+    
+    # Unified border spanning across both columns
+    st.markdown("<div style='border-bottom: 2px solid #1E3A8A; padding-bottom: 5px; margin-bottom: 15px;'></div>", unsafe_allow_html=True)
     
     selected_date_dt = pd.to_datetime(selected_date)
     daily_data = df[df['Date'] == selected_date_dt]
