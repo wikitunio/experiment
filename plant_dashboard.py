@@ -7,23 +7,16 @@ from datetime import timedelta
 import datetime
 import requests
 import io
-import base64
-import os
 
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AgriTech UREA Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-# -- IMAGE ENCODER --
-@st.cache_data
-def get_base64_of_bin_file(bin_file):
-    if os.path.exists(bin_file):
-        with open(bin_file, 'rb') as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    return ""
+# -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
+# Replace YOUR_GITHUB_USERNAME with your actual GitHub username (e.g., Ahmed-Waqar-Tunio)
+# Make sure your repo name is exactly urea-dashboard
+github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
 
-img_b64 = get_base64_of_bin_file("IMG_9291.JPG")
-bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("data:image/jpeg;base64,{img_b64}");' if img_b64 else 'background-color: #1E3A8A;'
+bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
 # -- ULTRA-COMPACT CUSTOM CSS --
 st.markdown(f"""
@@ -56,7 +49,7 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=300)
 def load_data():
     # THE FIX FOR 503 ERROR: Use a "User-Agent" header to look like a real browser
     url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1"
@@ -267,18 +260,14 @@ elif not df.empty:
         
         c_ctrl1, c_ctrl2 = st.columns([1, 2])
         with c_ctrl1:
-            # FIX: We now explicitly force the default custom date range to strictly anchor to 
-            # the current sidebar 'Shift Date', avoiding any future Excel typos.
             min_date = df['Date'].min().date()
             max_date = df['Date'].max().date()
             
             default_end = selected_date_dt.date()
-            if default_end > max_date: 
-                default_end = max_date
+            if default_end > max_date: default_end = max_date
             
             default_start = default_end - timedelta(days=6)
-            if default_start < min_date: 
-                default_start = min_date
+            if default_start < min_date: default_start = min_date
             
             custom_dates = st.date_input(
                 "Select Exact Time Period:",
