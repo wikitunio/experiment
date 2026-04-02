@@ -12,7 +12,7 @@ import numpy as np
 # -- PAGE CONFIGURATION --
 st.set_page_config(page_title="AGL UREA Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
-# -- THE SPEED FIX: LOAD IMAGE VIA URL --
+# -- THE SPEED FIX: LOAD IMAGE VIA URL INSTEAD OF BASE64 --
 github_img_url = "https://raw.githubusercontent.com/wikitunio/experiment/main/IMG_9291.JPG"
 bg_css = f'background-image: linear-gradient(rgba(0, 0, 50, 0.75), rgba(0, 0, 50, 0.75)), url("{github_img_url}"); background-color: #1E3A8A;'
 
@@ -173,7 +173,6 @@ def load_data():
     }
     df_daily = df_master.groupby('Date').agg(agg_funcs).reset_index()
     
-    # --- MATH FIX: Corrected H/C baseline to Reactor Design (0.52) ---
     def calc_theo_conv(row):
         if row['Rx_NC'] == 0 or row['Rx_HC'] == 0: return 0.0
         return 62.5 + (row['Rx_NC'] - 3.11) * 8.5 - (row['Rx_HC'] - 0.52) * 6.0
@@ -266,7 +265,7 @@ elif not df.empty:
                 <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
                 <div class="v-row"><span>H/C (Ref: 0.52)</span>{html_val('Rx_HC', 2)}</div>
                 <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
-                <div class="v-row"><span style="color:#059669; font-weight:bold;">Equilibrium Gap (Ref: &lt; 3.0%)</span>{html_val('Eq_Gap', 1, True)}</div>
+                <div class="v-row"><span style="color:#059669; font-weight:bold;">Eq Gap (Ref: &lt; 3.0%)</span>{html_val('Eq_Gap', 1, True)}</div>
                 <div class="v-row"><span>Urea Conc(32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -291,207 +290,4 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.38)</span>{html_val('HPA_NC', 2)}</div>
-                <div class="v-row"><span>H/C (Ref: 1.29)</span>{html_val('HPA_HC', 2)}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with v5:
-            st.markdown(f"""
-            <div class="v-card v-lpa">
-                <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.29)</span>{html_val('LPA_NC', 2)}</div>
-                <div class="v-row"><span>H/C (Ref: 2.28)</span>{html_val('LPA_HC', 2)}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # --- SECTION 3: TRENDS ---
-        st.markdown("<h3 class='section-header' style='margin-top: 35px;'>📈 Plant Trends Analysis</h3>", unsafe_allow_html=True)
-        
-        trend_days = st.slider("Quick Lookback Window (Days)", min_value=3, max_value=30, value=7, step=1)
-        trend_start = selected_date_dt - timedelta(days=trend_days - 1)
-        st.caption(f"Showing standard operational trends from **{trend_start.strftime('%d %b %Y')}** to **{selected_date.strftime('%d %b %Y')}**")
-        
-        df_trend = df[(df['Date'] <= selected_date_dt) & (df['Date'] >= trend_start)]
-        
-        def add_ref(fig, val=None):
-            date_str = selected_date.strftime('%Y-%m-%d')
-            fig.add_vline(x=date_str, line_width=2, line_dash="dash", line_color="gray")
-            if val is not None: fig.add_hline(y=val, line_dash="dot", line_color="red")
-            fig.update_layout(margin=dict(t=40, b=20, l=10, r=10), height=300)
-            return fig
-
-        fig_combo = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Production'], name="Production (MT)", mode='lines+markers', line=dict(color='#2ca02c', width=3)), secondary_y=False)
-        fig_combo.add_trace(go.Scatter(x=df_trend['Date'], y=df_trend['Load'], name="Plant Load (%)", mode='lines+markers', line=dict(color='#1f77b4', width=3, dash='dot')), secondary_y=True)
-        fig_combo.update_layout(title_text="1. Production & Plant Load", margin=dict(t=40, b=20, l=10, r=10), height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_combo.update_yaxes(title_text="Production (MT)", secondary_y=False)
-        fig_combo.update_yaxes(title_text="Plant Load (%)", secondary_y=True)
-        fig_combo.add_vline(x=selected_date.strftime('%Y-%m-%d'), line_width=2, line_dash="dash", line_color="gray")
-        st.plotly_chart(fig_combo, use_container_width=True, key="combo_prod_load")
-
-        t1, t2 = st.columns(2)
-        with t1:
-            f2 = px.line(df_trend, x='Date', y='CO2_Conv', markers=True, title='2. Reactor CO2 Conversion Trend (%)', line_shape='spline')
-            f2.update_traces(line_color='#9467bd') 
-            f2.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f2, 58.0), use_container_width=True, key="t2")
-            
-            f4 = px.line(df_trend, x='Date', y='Stripper_Eff', markers=True, title='4. Stripper Efficiency Trend (%)', line_shape='spline')
-            f4.update_traces(line_color='#d97706') 
-            f4.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f4, 78.0), use_container_width=True, key="t4")
-            
-            f6 = px.line(df_trend, x='Date', y='Moisture', markers=True, title='6. Avg Moisture (Design: 0.3%)', line_shape='spline')
-            st.plotly_chart(add_ref(f6, 0.3), use_container_width=True, key="t6")
-            
-            f8 = px.line(df_trend, x='Date', y='APS', markers=True, title='8. Avg APS Trend', line_shape='spline')
-            st.plotly_chart(add_ref(f8), use_container_width=True, key="t8")
-
-        with t2:
-            f3 = px.line(df_trend, x='Date', y='Rx_NC', markers=True, title='3. Reactor N/C Ratio Trend (Design: 3.11)', line_shape='spline')
-            st.plotly_chart(add_ref(f3, 3.11), use_container_width=True, key="t3")
-            
-            f5 = px.line(df_trend, x='Date', y='HPD_Eff', markers=True, title='5. HPD Efficiency Trend (%)', line_shape='spline')
-            f5.update_traces(line_color='#059669') 
-            f5.update_yaxes(range=[0, 100])
-            st.plotly_chart(add_ref(f5, 65.4), use_container_width=True, key="t5")
-            
-            f7 = px.line(df_trend, x='Date', y='Biuret', markers=True, title='7. Avg Biuret (Design: 0.9%)', line_shape='spline')
-            st.plotly_chart(add_ref(f7, 0.9), use_container_width=True, key="t7")
-
-        # --- SECTION 4: CUSTOM TREND BUILDER & EXPORT ---
-        st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='section-header'>🛠️ Custom Trend & Data Export</h3>", unsafe_allow_html=True)
-        st.caption("Select a custom time period and variables to plot them together and view their summary statistics.")
-        
-        c_ctrl1, c_ctrl2 = st.columns([1, 2])
-        with c_ctrl1:
-            min_date = df['Date'].min().date()
-            max_date = df['Date'].max().date()
-            
-            default_end = selected_date_dt.date()
-            if default_end > max_date: default_end = max_date
-            
-            default_start = default_end - timedelta(days=6)
-            if default_start < min_date: default_start = min_date
-            
-            custom_dates = st.date_input(
-                "Select Exact Time Period:",
-                value=(default_start, default_end),
-                min_value=min_date,
-                max_value=max_date
-            )
-            
-        with c_ctrl2:
-            available_vars = [col for col in df.columns if col not in ['Date', 'Remarks']]
-            selected_vars = st.multiselect("Select Variables:", available_vars, default=['Moisture', 'Biuret'])
-        
-        if len(custom_dates) == 2 and selected_vars:
-            c_start, c_end = custom_dates
-            mask_custom = (df['Date'].dt.date >= c_start) & (df['Date'].dt.date <= c_end)
-            df_custom = df.loc[mask_custom]
-            
-            if not df_custom.empty:
-                c_graph, c_stats = st.columns([3, 1])
-                
-                with c_graph:
-                    fig_custom = px.line(df_custom, x='Date', y=selected_vars, markers=True, title="Custom Trend Analysis", line_shape='spline')
-                    fig_custom.update_layout(height=400, margin=dict(t=40, b=20, l=10, r=10), legend_title_text='Variables')
-                    st.plotly_chart(fig_custom, use_container_width=True, key="custom_chart")
-                    
-                with c_stats:
-                    st.markdown("#### 📊 Period Summary")
-                    summary_df = df_custom[selected_vars].agg(['mean', 'min', 'max']).T
-                    summary_df.columns = ['Average', 'Minimum', 'Maximum']
-                    
-                    st.dataframe(summary_df.style.format("{:.2f}"), use_container_width=True)
-                    
-                    csv = df_custom[['Date'] + selected_vars].to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download Custom CSV",
-                        data=csv,
-                        file_name=f"AGL_Custom_Data_{c_start}_to_{c_end}.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
-            else:
-                st.warning("No data found for this custom date range.")
-        elif len(custom_dates) < 2:
-            st.info("Please select an End Date for the custom time period.")
-
-        # --- SECTION 5: AI & PREDICTIVE ANALYTICS ---
-        st.markdown("<hr style='border:1px solid #1E3A8A; margin: 30px 0;'>", unsafe_allow_html=True)
-        st.markdown("<h3 class='section-header'>🧠 AI Predictive Analytics & Automation</h3>", unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div class="sim-panel">
-            <h4 style="margin-top:0px; color:#334155;">🎛️ Real-Time Process Simulator</h4>
-            <p style="font-size:13px; color:#64748b;">Adjust physical plant parameters below to simulate the immediate impact on product Quality (Biuret) and Cooling (Moisture).</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        sim1, sim2, sim3, sim4 = st.columns(4)
-        with sim1: win_open = st.slider("Vanes Opening (%)", min_value=0, max_value=100, value=20, step=5, help="16 sets, Max Area: 72m²")
-        with sim2: fan_open = st.slider("ID Fan Louvers (%)", min_value=0, max_value=100, value=70, step=5, help="Induced Draft Fan Louver Control")
-        with sim3: melt_temp = st.slider("Melt Temp (°C)", min_value=132.0, max_value=145.0, value=138.0, step=0.5, help="Temp of Urea melt going to Prilling Tower")
-        with sim4: vac_abs = st.slider("Vacuum (mmHg Abs)", min_value=10.0, max_value=80.0, value=30.0, step=1.0, help="Absolute pressure of Final Concentrator")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        c_ai1, c_ai2 = st.columns([1, 1])
-        
-        with c_ai1:
-            st.markdown("#### 🎯 Dynamic Biuret Predictor")
-            st.caption("Predicts Biuret formation based on Historical Plant Load + Vacuum Distillation + Melt Temperature.")
-            
-            df_clean = df[(df['Load'] > 0) & (df['Biuret'] > 0)].dropna(subset=['Load', 'Biuret'])
-            
-            if len(df_clean) > 2:
-                z = np.polyfit(df_clean['Load'], df_clean['Biuret'], 1)
-                p = np.poly1d(z)
-                current_load = get_val(daily_data, 'Load')
-                base_pred_biuret = p(current_load)
-                
-                temp_biuret_penalty = (melt_temp - 138.0) * 0.015 
-                vac_biuret_penalty = (vac_abs - 30.0) * 0.005
-                simulated_biuret = base_pred_biuret + temp_biuret_penalty + vac_biuret_penalty
-                
-                fig_pred = go.Figure()
-                fig_pred.add_trace(go.Scatter(x=df_clean['Load'], y=df_clean['Biuret'], mode='markers', name='Historical Data', marker=dict(size=8, color='#e2e8f0', opacity=0.6)))
-                
-                x_trend = np.linspace(df_clean['Load'].min(), df_clean['Load'].max(), 10)
-                fig_pred.add_trace(go.Scatter(x=x_trend, y=p(x_trend), mode='lines', name='Baseline Trend', line=dict(color='#94a3b8', dash='dash')))
-                fig_pred.add_trace(go.Scatter(x=[current_load], y=[simulated_biuret], mode='markers', name='Simulated State', marker=dict(size=14, color='red', symbol='star')))
-                
-                fig_pred.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=250, xaxis_title="Plant Load (%)", yaxis_title="Biuret (%)", showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig_pred, use_container_width=True, key="biuret_pred")
-                
-                if simulated_biuret > 0.9: st.error(f"⚠️ **Warning:** Predicted Biuret is **{simulated_biuret:.2f}%**. To reduce it, try improving concentrator vacuum below {vac_abs} mmHg Abs or dropping melt temp.")
-                else: st.success(f"✅ **Safe Quality:** Predicted Biuret is **{simulated_biuret:.2f}%**.")
-            else:
-                st.warning("Not enough valid historical data to generate prediction.")
-                
-        with c_ai2:
-            st.markdown("#### 🌧️ Prilling Cooling Predictor")
-            st.caption("Estimates Moisture deviation based on real-time ambient weather, Aerodynamic Draft, and Melt Temp.")
-            
-            temp, hum = get_daudkhel_weather()
-            
-            if temp is not None and hum is not None:
-                st.markdown(f"""
-                <div style='background:#f0f9ff; padding:15px; border-radius:8px; border-left:4px solid #0284c7; margin-bottom:15px;'>
-                    <b>Live Daudkhel Weather:</b><br>
-                    🌡️ Temperature: <b>{temp}°C</b> &nbsp; | &nbsp; 💧 Humidity: <b>{hum}%</b>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                base_moist = 0.25
-                weather_penalty = max(0, (temp - 25) * 0.002) + max(0, (hum - 40) * 0.0015)
-                load_penalty = max(0, (get_val(daily_data, 'Load') - 100) * 0.001)
-                draft_penalty = max(0, (100 - fan_open) * 0.0005) + max(0, (100 - win_open) * 0.0008)
-                thermal_penalty = max(0, (melt_temp - 138.0) * 0.003)
-                vacuum_penalty = max(0, (vac_abs - 30.0) * 0.0015)
-                
-                est_moisture = base_moist + weather_penalty + load_penalty + draft_penalty + thermal_penalty + vacuum_penalty
-                
-                if est_moisture > 0.3: st.error(f"⚠️ **Warning:** Insufficient cooling for current thermodynamics. Estimated moisture: **{est_moisture:.3f}%** (Exceeds 0.3% Design). Increase Draft Fan or reduce Melt Temp.")
-                elif est_moisture > 0.28: st.warning(f"
+                <div class="v-row"><span>N/C (Ref: 2.38)
