@@ -59,7 +59,7 @@ def get_daudkhel_weather():
     except:
         return None, None
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def load_data():
     url = "https://muet14-my.sharepoint.com/:x:/g/personal/18ch37_students_muet_edu_pk/IQAwrk9MhgHFTZl2r-JviPwVAfxUR7fGMtM8izdZFteTZoQ?download=1"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x86) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
