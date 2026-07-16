@@ -250,8 +250,8 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-rx">
                 <div class="v-title v-title-rx">⚗️ Reactor</div>
-                <div class="v-row"><span>N/C (Ref: 3.11)</span>{html_val('Rx_NC', 2)}</div>
-                <div class="v-row"><span>H/C (Ref: 0.52)</span>{html_val('Rx_HC', 2)}</div>
+                <div class="v-row"><span>N/C (3.11)</span>{html_val('Rx_NC', 2)}</div>
+                <div class="v-row"><span>H/C (0.52)</span>{html_val('Rx_HC', 2)}</div>
                 <div class="v-row"><span>CO2 Conv (58%)</span>{html_val('CO2_Conv', 1, True)}</div>
                 <div class="v-row"><span style="color:#059669; font-weight:bold;">Equilibrium Gap (Ref: &lt; 3.0%)</span>{html_val('Eq_Gap', 1, True)}</div>
                 <div class="v-row"><span>Urea Conc(32.7%)</span>{html_val('Urea_Conc', 2, True)}</div>
@@ -261,7 +261,7 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-st">
                 <div class="v-title v-title-st">🌪️ Stripper</div>
-                <div class="v-row"><span>Eff (Ref: 78%)</span>{html_val('Stripper_Eff', 1, True)}</div>
+                <div class="v-row"><span>Eff (78%)</span>{html_val('Stripper_Eff', 1, True)}</div>
                 <div class="v-row"><span>Stripper N/C (2.01)</span>{html_val('Stripper_NC', 2)}</div>
                 <div class="v-row"><span>Ammonia (8.59%)</span>{html_val('Stripper_NH3', 2, True)}</div>
                 <div class="v-row"><span>Urea Conc (53.71)</span>{html_val('Stripper_Urea', 2, True)}</div>
@@ -278,16 +278,16 @@ elif not df.empty:
             st.markdown(f"""
             <div class="v-card v-hpa">
                 <div class="v-title v-title-hpa">💧 HPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.38)</span>{html_val('HPA_NC', 2)}</div>
-                <div class="v-row"><span>H/C (Ref: 1.29)</span>{html_val('HPA_HC', 2)}</div>
+                <div class="v-row"><span>N/C (2.38)</span>{html_val('HPA_NC', 2)}</div>
+                <div class="v-row"><span>H/C (1.29)</span>{html_val('HPA_HC', 2)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v5:
             st.markdown(f"""
             <div class="v-card v-lpa">
                 <div class="v-title v-title-lpa">☁️ LPA</div>
-                <div class="v-row"><span>N/C (Ref: 2.29)</span>{html_val('LPA_NC', 2)}</div>
-                <div class="v-row"><span>H/C (Ref: 2.28)</span>{html_val('LPA_HC', 2)}</div>
+                <div class="v-row"><span>N/C (2.29)</span>{html_val('LPA_NC', 2)}</div>
+                <div class="v-row"><span>H/C (2.28)</span>{html_val('LPA_HC', 2)}</div>
             </div>
             """, unsafe_allow_html=True)
 
