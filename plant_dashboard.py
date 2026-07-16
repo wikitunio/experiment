@@ -263,8 +263,8 @@ elif not df.empty:
                 <div class="v-title v-title-st">🌪️ Stripper</div>
                 <div class="v-row"><span>Eff (Ref: 78%)</span>{html_val('Stripper_Eff', 1, True)}</div>
                 <div class="v-row"><span>Stripper N/C (2.01)</span>{html_val('Stripper_NC', 2)}</div>
-                <div class="v-row"><span>Ammonia</span>{html_val('Stripper_NH3', 2, True)}</div>
-                <div class="v-row"><span>Urea Conc</span>{html_val('Stripper_Urea', 2, True)}</div>
+                <div class="v-row"><span>Ammonia (8.59%)</span>{html_val('Stripper_NH3', 2, True)}</div>
+                <div class="v-row"><span>Urea Conc (53.71)</span>{html_val('Stripper_Urea', 2, True)}</div>
             </div>
             """, unsafe_allow_html=True)
         with v3:
